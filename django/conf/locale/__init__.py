@@ -147,7 +147,7 @@ LANG_INFO = {
         'bidi': False,
         'code': 'eu',
         'name': 'Basque',
-        'name_local': 'Basque',
+        'name_local': 'Euskara',
     },
     'fa': {
         'bidi': True,
@@ -340,6 +340,12 @@ LANG_INFO = {
         'code': 'no',
         'name': 'Norwegian',
         'name_local': 'norsk',
+    },
+    'oc': {
+        'bidi': False,
+        'code': 'oc',
+        'name': 'Occitan',
+        'name_local': 'Occitan',
     },
     'os': {
         'bidi': False,
