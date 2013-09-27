@@ -103,6 +103,7 @@ LANGUAGES = (
     ('ne', gettext_noop('Nepali')),
     ('nl', gettext_noop('Dutch')),
     ('nn', gettext_noop('Norwegian Nynorsk')),
+    ('oc', gettext_noop('Occitan')),
     ('os', gettext_noop('Ossetic')),
     ('pa', gettext_noop('Punjabi')),
     ('pl', gettext_noop('Polish')),
