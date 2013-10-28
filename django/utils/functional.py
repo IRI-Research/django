@@ -148,6 +148,11 @@ def lazy(func, *resultclasses):
             else:
                 return func(*self.__args, **self.__kw)
 
+        def __ne__(self, other):
+            if isinstance(other, Promise):
+                other = other.__cast()
+            return self.__cast() != other
+
         def __eq__(self, other):
             if isinstance(other, Promise):
                 other = other.__cast()
@@ -162,7 +167,7 @@ def lazy(func, *resultclasses):
             return hash(self.__cast())
 
         def __mod__(self, rhs):
-            if self._delegate_bytes and not six.PY3:
+            if self._delegate_bytes and six.PY2:
                 return bytes(self) % rhs
             elif self._delegate_text:
                 return six.text_type(self) % rhs
@@ -252,23 +257,18 @@ class LazyObject(object):
         """
         Must be implemented by subclasses to initialise the wrapped object.
         """
-        raise NotImplementedError
+        raise NotImplementedError('subclasses of LazyObject must provide a _setup() method')
 
     # Introspection support
     __dir__ = new_method_proxy(dir)
 
     # Dictionary methods support
-    @new_method_proxy
-    def __getitem__(self, key):
-        return self[key]
+    __getitem__ = new_method_proxy(operator.getitem)
+    __setitem__ = new_method_proxy(operator.setitem)
+    __delitem__ = new_method_proxy(operator.delitem)
 
-    @new_method_proxy
-    def __setitem__(self, key, value):
-        self[key] = value
-
-    @new_method_proxy
-    def __delitem__(self, key):
-        del self[key]
+    __len__ = new_method_proxy(len)
+    __contains__ = new_method_proxy(operator.contains)
 
 
 # Workaround for http://bugs.python.org/issue12370
@@ -398,9 +398,8 @@ def partition(predicate, values):
 if sys.version_info >= (2, 7, 2):
     from functools import total_ordering
 else:
-    # For Python < 2.7.2. Python 2.6 does not have total_ordering, and
-    # total_ordering in 2.7 versions prior to 2.7.2 is buggy. See
-    # http://bugs.python.org/issue10042 for details. For these versions use
+    # For Python < 2.7.2. total_ordering in versions prior to 2.7.2 is buggy.
+    # See http://bugs.python.org/issue10042 for details. For these versions use
     # code borrowed from Python 2.7.3.
     def total_ordering(cls):
         """Class decorator that fills in missing ordering methods"""

@@ -1,16 +1,17 @@
-from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import re
+import unittest
+from unittest import skipUnless
 
 from django.db import connection
 from django.contrib.gis import gdal
 from django.contrib.gis.geos import HAS_GEOS
 from django.contrib.gis.tests.utils import (
-    no_mysql, no_oracle, no_spatialite,
+    HAS_SPATIAL_DB, no_mysql, no_oracle, no_spatialite,
     mysql, oracle, postgis, spatialite)
 from django.test import TestCase
-from django.utils import six, unittest
-from django.utils.unittest import skipUnless
+from django.utils import six
 
 if HAS_GEOS:
     from django.contrib.gis.geos import (fromstr, GEOSGeometry,
@@ -23,11 +24,11 @@ if HAS_GEOS and not spatialite:
 
 
 def postgis_bug_version():
-    spatial_version = getattr(connection.ops, "spatial_version", (0,0,0))
+    spatial_version = getattr(connection.ops, "spatial_version", (0, 0, 0))
     return spatial_version and (2, 0, 0) <= spatial_version <= (2, 0, 1)
 
 
-@skipUnless(HAS_GEOS and postgis, "Geos and postgis are required.")
+@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
 class GeoModelTest(TestCase):
 
     def test_fixtures(self):
@@ -117,7 +118,7 @@ class GeoModelTest(TestCase):
             # San Antonio in 'Texas 4205, Southern Zone (1983, meters)' (SRID 41157)
             # Used the following Oracle SQL to get this value:
             #  SELECT SDO_UTIL.TO_WKTGEOMETRY(SDO_CS.TRANSFORM(SDO_GEOMETRY('POINT (-98.493183 29.424170)', 4326), 41157)) FROM DUAL;
-            nad_wkt  = 'POINT (300662.034646583 5416427.45974934)'
+            nad_wkt = 'POINT (300662.034646583 5416427.45974934)'
             nad_srid = 41157
         else:
             # San Antonio in 'NAD83(HARN) / Texas Centric Lambert Conformal' (SRID 3084)
@@ -182,14 +183,15 @@ class GeoModelTest(TestCase):
     def test_inherited_geofields(self):
         "Test GeoQuerySet methods on inherited Geometry fields."
         # Creating a Pennsylvanian city.
-        mansfield = PennsylvaniaCity.objects.create(name='Mansfield', county='Tioga', point='POINT(-77.071445 41.823881)')
+        PennsylvaniaCity.objects.create(name='Mansfield', county='Tioga', point='POINT(-77.071445 41.823881)')
 
         # All transformation SQL will need to be performed on the
         # _parent_ table.
         qs = PennsylvaniaCity.objects.transform(32128)
 
         self.assertEqual(1, qs.count())
-        for pc in qs: self.assertEqual(32128, pc.point.srid)
+        for pc in qs:
+            self.assertEqual(32128, pc.point.srid)
 
     def test_raw_sql_query(self):
         "Testing raw SQL query."
@@ -202,7 +204,7 @@ class GeoModelTest(TestCase):
         self.assertTrue(isinstance(cities2[0].point, Point))
 
 
-@skipUnless(HAS_GEOS and postgis, "Geos and postgis are required.")
+@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
 class GeoLookupTest(TestCase):
 
     @no_mysql
@@ -228,7 +230,8 @@ class GeoLookupTest(TestCase):
             qs = City.objects.filter(point__contained=texas.mpoly)
             self.assertEqual(3, qs.count())
             cities = ['Houston', 'Dallas', 'Oklahoma City']
-            for c in qs: self.assertEqual(True, c.name in cities)
+            for c in qs:
+                self.assertEqual(True, c.name in cities)
 
         # Pulling out some cities.
         houston = City.objects.get(name='Houston')
@@ -283,13 +286,15 @@ class GeoLookupTest(TestCase):
                   'Lawrence', 'Chicago', 'Wellington']
         qs = City.objects.filter(point__right=co_border)
         self.assertEqual(6, len(qs))
-        for c in qs: self.assertEqual(True, c.name in cities)
+        for c in qs:
+            self.assertEqual(True, c.name in cities)
 
         # These cities should be strictly to the right of the KS border.
         cities = ['Chicago', 'Wellington']
         qs = City.objects.filter(point__right=ks_border)
         self.assertEqual(2, len(qs))
-        for c in qs: self.assertEqual(True, c.name in cities)
+        for c in qs:
+            self.assertEqual(True, c.name in cities)
 
         # Note: Wellington has an 'X' value of 174, so it will not be considered
         #  to the left of CO.
@@ -299,7 +304,8 @@ class GeoLookupTest(TestCase):
         cities = ['Pueblo', 'Victoria']
         qs = City.objects.filter(point__left=ks_border)
         self.assertEqual(2, len(qs))
-        for c in qs: self.assertEqual(True, c.name in cities)
+        for c in qs:
+            self.assertEqual(True, c.name in cities)
 
     # The left/right lookup tests are known failures on PostGIS 2.0/2.0.1
     # http://trac.osgeo.org/postgis/ticket/2035
@@ -312,7 +318,8 @@ class GeoLookupTest(TestCase):
         c1 = City.objects.get(point=pnt)
         c2 = City.objects.get(point__same_as=pnt)
         c3 = City.objects.get(point__equals=pnt)
-        for c in [c1, c2, c3]: self.assertEqual('Houston', c.name)
+        for c in [c1, c2, c3]:
+            self.assertEqual('Houston', c.name)
 
     @no_mysql
     def test_null_geometries(self):
@@ -388,7 +395,7 @@ class GeoLookupTest(TestCase):
             self.assertEqual('Lawrence', City.objects.get(point__relate=(ks.poly, intersects_mask)).name)
 
 
-@skipUnless(HAS_GEOS and postgis, "Geos and postgis are required.")
+@skipUnless(HAS_GEOS and HAS_SPATIAL_DB, "Geos and spatial db are required.")
 class GeoQuerySetTest(TestCase):
     # Please keep the tests in GeoQuerySet method's alphabetic order
 
@@ -409,7 +416,6 @@ class GeoQuerySetTest(TestCase):
     def test_diff_intersection_union(self):
         "Testing the `difference`, `intersection`, `sym_difference`, and `union` GeoQuerySet methods."
         geom = Point(5, 23)
-        tol = 1
         qs = Country.objects.all().difference(geom).sym_difference(geom).union(geom)
 
         # XXX For some reason SpatiaLite does something screwey with the Texas geometry here.  Also,
@@ -432,6 +438,13 @@ class GeoQuerySetTest(TestCase):
                 self.assertEqual(c.mpoly.sym_difference(geom), c.sym_difference)
                 self.assertEqual(c.mpoly.union(geom), c.union)
 
+    @skipUnless(getattr(connection.ops, 'envelope', False), 'Database does not support envelope operation')
+    def test_envelope(self):
+        "Testing the `envelope` GeoQuerySet method."
+        countries = Country.objects.all().envelope()
+        for country in countries:
+            self.assertIsInstance(country.envelope, Polygon)
+
     @no_mysql
     @no_spatialite # SpatiaLite does not have an Extent function
     def test_extent(self):
@@ -452,12 +465,14 @@ class GeoQuerySetTest(TestCase):
     @no_spatialite
     def test_force_rhr(self):
         "Testing GeoQuerySet.force_rhr()."
-        rings = ( ( (0, 0), (5, 0), (0, 5), (0, 0) ),
-                  ( (1, 1), (1, 3), (3, 1), (1, 1) ),
-                  )
-        rhr_rings = ( ( (0, 0), (0, 5), (5, 0), (0, 0) ),
-                      ( (1, 1), (3, 1), (1, 3), (1, 1) ),
-                      )
+        rings = (
+            ((0, 0), (5, 0), (0, 5), (0, 0)),
+            ((1, 1), (1, 3), (3, 1), (1, 1)),
+        )
+        rhr_rings = (
+            ((0, 0), (0, 5), (5, 0), (0, 0)),
+            ((1, 1), (3, 1), (1, 3), (1, 1)),
+        )
         State.objects.create(name='Foo', poly=Polygon(*rings))
         s = State.objects.force_rhr().get(name='Foo')
         self.assertEqual(rhr_rings, s.force_rhr.coords)
@@ -467,7 +482,8 @@ class GeoQuerySetTest(TestCase):
     @no_spatialite
     def test_geohash(self):
         "Testing GeoQuerySet.geohash()."
-        if not connection.ops.geohash: return
+        if not connection.ops.geohash:
+            return
         # Reference query:
         # SELECT ST_GeoHash(point) FROM geoapp_city WHERE name='Houston';
         # SELECT ST_GeoHash(point, 5) FROM geoapp_city WHERE name='Houston';
@@ -518,7 +534,7 @@ class GeoQuerySetTest(TestCase):
 
     def test_gml(self):
         "Testing GML output from the database using GeoQuerySet.gml()."
-        if mysql or (spatialite and not connection.ops.gml) :
+        if mysql or (spatialite and not connection.ops.gml):
             self.assertRaises(NotImplementedError, Country.objects.all().gml, field_name='mpoly')
             return
 
@@ -561,7 +577,7 @@ class GeoQuerySetTest(TestCase):
         # The reference KML depends on the version of PostGIS used
         # (the output stopped including altitude in 1.3.3).
         if connection.ops.spatial_version >= (1, 3, 3):
-            ref_kml =  '<Point><coordinates>-104.609252,38.255001</coordinates></Point>'
+            ref_kml = '<Point><coordinates>-104.609252,38.255001</coordinates></Point>'
         else:
             ref_kml = '<Point><coordinates>-104.609252,38.255001,0</coordinates></Point>'
 
@@ -610,7 +626,8 @@ class GeoQuerySetTest(TestCase):
 
         if not oracle:
             # Oracle cannot count vertices in Point geometries.
-            for c in City.objects.num_points(): self.assertEqual(1, c.num_points)
+            for c in City.objects.num_points():
+                self.assertEqual(1, c.num_points)
 
     @no_mysql
     def test_point_on_surface(self):
@@ -618,15 +635,15 @@ class GeoQuerySetTest(TestCase):
         # Reference values.
         if oracle:
             # SELECT SDO_UTIL.TO_WKTGEOMETRY(SDO_GEOM.SDO_POINTONSURFACE(GEOAPP_COUNTRY.MPOLY, 0.05)) FROM GEOAPP_COUNTRY;
-            ref = {'New Zealand' : fromstr('POINT (174.616364 -36.100861)', srid=4326),
-                   'Texas' : fromstr('POINT (-103.002434 36.500397)', srid=4326),
+            ref = {'New Zealand': fromstr('POINT (174.616364 -36.100861)', srid=4326),
+                   'Texas': fromstr('POINT (-103.002434 36.500397)', srid=4326),
                    }
 
         elif postgis or spatialite:
             # Using GEOSGeometry to compute the reference point on surface values
             # -- since PostGIS also uses GEOS these should be the same.
-            ref = {'New Zealand' : Country.objects.get(name='New Zealand').mpoly.point_on_surface,
-                   'Texas' : Country.objects.get(name='Texas').mpoly.point_on_surface
+            ref = {'New Zealand': Country.objects.get(name='New Zealand').mpoly.point_on_surface,
+                   'Texas': Country.objects.get(name='Texas').mpoly.point_on_surface
                    }
 
         for c in Country.objects.point_on_surface():
@@ -641,7 +658,7 @@ class GeoQuerySetTest(TestCase):
     @no_spatialite
     def test_reverse_geom(self):
         "Testing GeoQuerySet.reverse_geom()."
-        coords = [ (-95.363151, 29.763374), (-95.448601, 29.713803) ]
+        coords = [(-95.363151, 29.763374), (-95.448601, 29.713803)]
         Track.objects.create(name='Foo', line=LineString(coords))
         t = Track.objects.reverse_geom().get(name='Foo')
         coords.reverse()
@@ -684,7 +701,7 @@ class GeoQuerySetTest(TestCase):
                '12.46472 43.89555,12.45917 43.89611,12.41639 43.90472,'
                '12.41222 43.90610,12.40782 43.91366,12.40389 43.92667,'
                '12.40500 43.94833,12.40889 43.95499,12.41580 43.95795)))')
-        sm = Country.objects.create(name='San Marino', mpoly=fromstr(wkt))
+        Country.objects.create(name='San Marino', mpoly=fromstr(wkt))
 
         # Because floating-point arithmetic isn't exact, we set a tolerance
         # to pass into GEOS `equals_exact`.

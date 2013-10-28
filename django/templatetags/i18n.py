@@ -147,7 +147,7 @@ class BlockTranslateNode(Node):
         default_value = settings.TEMPLATE_STRING_IF_INVALID
         render_value = lambda v: render_value_in_context(
             context.get(v, default_value), context)
-        data = dict([(v, render_value(v)) for v in vars])
+        data = dict((v, render_value(v)) for v in vars)
         context.pop()
         try:
             result = result % data
@@ -341,9 +341,9 @@ def do_translate(parser, token):
             if value[0] == "'":
                 m = re.match("^'([^']+)'(\|.*$)", value)
                 if m:
-                    value = '"%s"%s' % (m.group(1).replace('"','\\"'), m.group(2))
+                    value = '"%s"%s' % (m.group(1).replace('"', '\\"'), m.group(2))
                 elif value[-1] == "'":
-                    value = '"%s"' % value[1:-1].replace('"','\\"')
+                    value = '"%s"' % value[1:-1].replace('"', '\\"')
 
             noop = False
             asvar = None
@@ -359,7 +359,7 @@ def do_translate(parser, token):
                     asvar = self.tag()
                 else:
                     raise TemplateSyntaxError(
-                        "Only options for 'trans' are 'noop', " \
+                        "Only options for 'trans' are 'noop', "
                         "'context \"xxx\"', and 'as VAR'.")
             return value, noop, asvar, message_context
     value, noop, asvar, message_context = TranslateParser(token.contents).top()

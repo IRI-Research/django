@@ -19,7 +19,7 @@ class MyModel(six.with_metaclass(CustomBaseModel, models.Model)):
 # This is done to ensure that for Python2 only, defining metaclasses
 # still does not fail to create the model.
 
-if not six.PY3:
-    class MyModel(models.Model):
+if six.PY2:
+    class MyPython2Model(models.Model):
         """Model subclass with a custom base using __metaclass__."""
         __metaclass__ = CustomBaseModel

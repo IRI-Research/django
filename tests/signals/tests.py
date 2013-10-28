@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import unicode_literals
 
 from django.db.models import signals
 from django.dispatch import receiver
@@ -172,7 +172,7 @@ class SignalTests(TestCase):
         a, b = MyReceiver(1), MyReceiver(2)
         signals.post_save.connect(sender=Person, receiver=a)
         signals.post_save.connect(sender=Person, receiver=b)
-        p = Person.objects.create(first_name='John', last_name='Smith')
+        Person.objects.create(first_name='John', last_name='Smith')
 
         self.assertTrue(a._run)
         self.assertTrue(b._run)

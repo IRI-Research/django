@@ -163,6 +163,31 @@ Django provides a single API to control database transactions.
     called, so the exception handler can also operate on the database if
     necessary.
 
+    .. admonition:: Avoid catching exceptions inside ``atomic``!
+
+        When exiting an ``atomic`` block, Django looks at whether it's exited
+        normally or with an exception to determine whether to commit or roll
+        back. If you catch and handle exceptions inside an ``atomic`` block,
+        you may hide from Django the fact that a problem has happened. This
+        can result in unexpected behavior.
+
+        This is mostly a concern for :exc:`~django.db.DatabaseError` and its
+        subclasses such as :exc:`~django.db.IntegrityError`. After such an
+        error, the transaction is broken and Django will perform a rollback at
+        the end of the ``atomic`` block. If you attempt to run database
+        queries before the rollback happens, Django will raise a
+        :class:`~django.db.transaction.TransactionManagementError`. You may
+        also encounter this behavior when an ORM-related signal handler raises
+        an exception.
+
+        The correct way to catch database errors is around an ``atomic`` block
+        as shown above. If necessary, add an extra ``atomic`` block for this
+        purpose. This pattern has another advantage: it delimits explicitly
+        which operations will be rolled back if an exception occurs.
+
+        If you catch exceptions raised by raw SQL queries, Django's behavior
+        is unspecified and database-dependent.
+
     In order to guarantee atomicity, ``atomic`` disables some APIs. Attempting
     to commit, roll back, or change the autocommit state of the database
     connection within an ``atomic`` block will raise an exception.
@@ -389,6 +414,27 @@ The following example demonstrates the use of savepoints::
             transaction.savepoint_rollback(sid)
             # open transaction now contains only a.save()
 
+.. versionadded:: 1.6
+
+Savepoints may be used to recover from a database error by performing a partial
+rollback. If you're doing this inside an :func:`atomic` block, the entire block
+will still be rolled back, because it doesn't know you've handled the situation
+at a lower level! To prevent this, you can control the rollback behavior with
+the following functions.
+
+.. function:: get_rollback(using=None)
+
+.. function:: set_rollback(rollback, using=None)
+
+Setting the rollback flag to ``True`` forces a rollback when exiting the
+innermost atomic block. This may be useful to trigger a rollback without
+raising an exception.
+
+Setting it to ``False`` prevents such a rollback. Before doing that, make sure
+you've rolled back the transaction to a known-good savepoint within the current
+atomic block! Otherwise you're breaking atomicity and data corruption may
+occur.
+
 Database-specific notes
 =======================
 
@@ -564,7 +610,7 @@ API changes
 Transaction middleware
 ~~~~~~~~~~~~~~~~~~~~~~
 
-In Django 1.6, ``TransactionMiddleware`` is deprecated and replaced
+In Django 1.6, ``TransactionMiddleware`` is deprecated and replaced by
 :setting:`ATOMIC_REQUESTS <DATABASE-ATOMIC_REQUESTS>`. While the general
 behavior is the same, there are two differences.
 
@@ -598,7 +644,7 @@ context managers breaks atomicity.
 Managing autocommit
 ~~~~~~~~~~~~~~~~~~~
 
-Django 1.6 introduces an explicit :ref:`API for mananging autocommit
+Django 1.6 introduces an explicit :ref:`API for managing autocommit
 <managing-autocommit>`.
 
 To disable autocommit temporarily, instead of::

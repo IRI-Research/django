@@ -1,6 +1,7 @@
-from __future__ import absolute_import, unicode_literals
+from __future__ import unicode_literals
 
 from datetime import date
+import unittest
 import warnings
 
 from django import forms
@@ -9,7 +10,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.forms.models import (modelform_factory, ModelChoiceField,
     fields_for_model, construct_instance, ModelFormMetaclass)
 from django.utils import six
-from django.utils import unittest
 from django.test import TestCase
 
 from .models import (Person, RealPerson, Triple, FilePathModel, Article,
@@ -35,6 +35,7 @@ class ModelMultipleChoiceFieldTests(TestCase):
             Person.objects.create(name="Person %s" % i)
 
         self._validator_run = False
+
         def my_validator(value):
             self._validator_run = True
 
@@ -92,17 +93,18 @@ class OverrideCleanTests(TestCase):
         self.assertEqual(form.instance.left, 1)
 
 
-
 class PartiallyLocalizedTripleForm(forms.ModelForm):
     class Meta:
         model = Triple
         localized_fields = ('left', 'right',)
+        fields = '__all__'
 
 
 class FullyLocalizedTripleForm(forms.ModelForm):
     class Meta:
         model = Triple
-        localized_fields = "__all__"
+        localized_fields = '__all__'
+        fields = '__all__'
 
 class LocalizedModelFormTest(TestCase):
     def test_model_form_applies_localize_to_some_fields(self):
@@ -176,9 +178,9 @@ class ManyToManyCallableInitialTests(TestCase):
             return db_field.formfield(**kwargs)
 
         # Set up some Publications to use as data
-        book1 = Publication.objects.create(title="First Book", date_published=date(2007,1,1))
-        book2 = Publication.objects.create(title="Second Book", date_published=date(2008,1,1))
-        book3 = Publication.objects.create(title="Third Book", date_published=date(2009,1,1))
+        book1 = Publication.objects.create(title="First Book", date_published=date(2007, 1, 1))
+        book2 = Publication.objects.create(title="Second Book", date_published=date(2008, 1, 1))
+        book3 = Publication.objects.create(title="Third Book", date_published=date(2009, 1, 1))
 
         # Create a ModelForm, instantiate it, and check that the output is as expected
         ModelForm = modelform_factory(Article, fields="__all__",
@@ -250,7 +252,7 @@ class OneToOneFieldTests(TestCase):
         publication = Publication.objects.create(title="Pravda",
             date_published=date(1991, 8, 22))
         author = Author.objects.create(publication=publication, full_name='John Doe')
-        form = AuthorForm({'publication':'', 'full_name':'John Doe'}, instance=author)
+        form = AuthorForm({'publication': '', 'full_name': 'John Doe'}, instance=author)
         self.assertTrue(form.is_valid())
         self.assertEqual(form.cleaned_data['publication'], None)
         author = form.save()
@@ -268,7 +270,7 @@ class OneToOneFieldTests(TestCase):
         publication = Publication.objects.create(title="Pravda",
             date_published=date(1991, 8, 22))
         author = Author1.objects.create(publication=publication, full_name='John Doe')
-        form = AuthorForm({'publication':'', 'full_name':'John Doe'}, instance=author)
+        form = AuthorForm({'publication': '', 'full_name': 'John Doe'}, instance=author)
         self.assertTrue(not form.is_valid())
 
 
@@ -348,7 +350,7 @@ class FormFieldCallbackTests(TestCase):
         self.assertNotEqual(Form.base_fields['name'].widget.__class__, forms.Textarea)
 
         # With a widget should not set the widget to textarea
-        Form = modelform_factory(Person, fields="__all__", widgets={'name':widget})
+        Form = modelform_factory(Person, fields="__all__", widgets={'name': widget})
         self.assertEqual(Form.base_fields['name'].widget.__class__, forms.Textarea)
 
     def test_custom_callback(self):
@@ -368,8 +370,7 @@ class FormFieldCallbackTests(TestCase):
                 widgets = {'name': widget}
                 fields = "__all__"
 
-        _ = modelform_factory(Person, form=BaseForm,
-                              formfield_callback=callback)
+        modelform_factory(Person, form=BaseForm, formfield_callback=callback)
         id_field, name_field = Person._meta.fields
 
         self.assertEqual(callback_args,
@@ -564,10 +565,10 @@ class CustomMetaclassTestCase(TestCase):
 class TestTicket19733(TestCase):
     def test_modelform_factory_without_fields(self):
         with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always", PendingDeprecationWarning)
+            warnings.simplefilter("always", DeprecationWarning)
             # This should become an error once deprecation cycle is complete.
-            form = modelform_factory(Person)
-        self.assertEqual(w[0].category, PendingDeprecationWarning)
+            modelform_factory(Person)
+        self.assertEqual(w[0].category, DeprecationWarning)
 
     def test_modelform_factory_with_all_fields(self):
         form = modelform_factory(Person, fields="__all__")

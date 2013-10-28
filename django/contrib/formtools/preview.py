@@ -39,7 +39,7 @@ class FormPreview(object):
         """
         while 1:
             try:
-                f = self.form.base_fields[name]
+                self.form.base_fields[name]
             except KeyError:
                 break # This field name isn't being used by the form.
             name += '_'
@@ -100,7 +100,6 @@ class FormPreview(object):
     def get_context(self, request, form):
         "Context for template rendering."
         return {'form': form, 'stage_field': self.unused_name('stage'), 'state': self.state}
-
 
     def parse_params(self, *args, **kwargs):
         """

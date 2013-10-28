@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import, unicode_literals
+from __future__ import unicode_literals
 
 import tempfile
 import os
@@ -9,11 +9,13 @@ from django.contrib import admin
 from django.contrib.admin.views.main import ChangeList
 from django.core.files.storage import FileSystemStorage
 from django.core.mail import EmailMessage
+from django.core.servers.basehttp import FileWrapper
 from django.conf.urls import patterns, url
 from django.db import models
 from django.forms.models import BaseModelFormSet
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.contrib.admin import BooleanFieldListFilter
+from django.utils.six import StringIO
 
 from .models import (Article, Chapter, Account, Media, Child, Parent, Picture,
     Widget, DooHickey, Grommet, Whatsit, FancyDoodad, Category, Link,
@@ -27,8 +29,9 @@ from .models import (Article, Chapter, Account, Media, Child, Parent, Picture,
     Album, Question, Answer, ComplexSortedPerson, PluggableSearchPerson, PrePopulatedPostLargeSlug,
     AdminOrderedField, AdminOrderedModelMethod, AdminOrderedAdminMethod,
     AdminOrderedCallable, Report, Color2, UnorderedObject, MainPrepopulated,
-    RelatedPrepopulated, UndeletableObject, UserMessenger, Simple, Choice,
-    ShortMessage, Telegram)
+    RelatedPrepopulated, UndeletableObject, UnchangeableObject, UserMessenger, Simple, Choice,
+    ShortMessage, Telegram, FilteredManager, EmptyModelHidden,
+    EmptyModelVisible, EmptyModelMixin)
 
 
 def callable_year(dt_value):
@@ -42,9 +45,9 @@ callable_year.admin_order_field = 'date'
 class ArticleInline(admin.TabularInline):
     model = Article
     prepopulated_fields = {
-        'title' : ('content',)
+        'title': ('content',)
     }
-    fieldsets=(
+    fieldsets = (
         ('Some fields', {
             'classes': ('collapse',),
             'fields': ('title', 'content')
@@ -71,7 +74,7 @@ class ChapterXtra1Admin(admin.ModelAdmin):
 class ArticleAdmin(admin.ModelAdmin):
     list_display = ('content', 'date', callable_year, 'model_year', 'modeladmin_year')
     list_filter = ('date', 'section')
-    fieldsets=(
+    fieldsets = (
         ('Some fields', {
             'classes': ('collapse',),
             'fields': ('title', 'content')
@@ -149,7 +152,7 @@ class InquisitionAdmin(admin.ModelAdmin):
 
 
 class SketchAdmin(admin.ModelAdmin):
-    raw_id_fields = ('inquisition',)
+    raw_id_fields = ('inquisition', 'defendant0', 'defendant1')
 
 
 class FabricAdmin(admin.ModelAdmin):
@@ -238,8 +241,20 @@ def redirect_to(modeladmin, request, selected):
 redirect_to.short_description = 'Redirect to (Awesome action)'
 
 
+def download(modeladmin, request, selected):
+    buf = StringIO('This is the content of the file')
+    return StreamingHttpResponse(FileWrapper(buf))
+download.short_description = 'Download subscription'
+
+
+def no_perm(modeladmin, request, selected):
+    return HttpResponse(content='No permission to perform this action',
+                        status=403)
+no_perm.short_description = 'No permission to run'
+
+
 class ExternalSubscriberAdmin(admin.ModelAdmin):
-    actions = [redirect_to, external_mail]
+    actions = [redirect_to, external_mail, download, no_perm]
 
 
 class Podcast(Media):
@@ -367,7 +382,7 @@ class SubPostInline(admin.TabularInline):
     model = PrePopulatedSubPost
 
     prepopulated_fields = {
-        'subslug' : ('subtitle',)
+        'subslug': ('subtitle',)
     }
 
     def get_readonly_fields(self, request, obj=None):
@@ -384,7 +399,7 @@ class SubPostInline(admin.TabularInline):
 class PrePopulatedPostAdmin(admin.ModelAdmin):
     list_display = ['title', 'slug']
     prepopulated_fields = {
-        'slug' : ('title',)
+        'slug': ('title',)
     }
 
     inlines = [SubPostInline]
@@ -436,6 +451,10 @@ class GadgetAdmin(admin.ModelAdmin):
         return CustomChangeList
 
 
+class ToppingAdmin(admin.ModelAdmin):
+    readonly_fields = ('pizzas',)
+
+
 class PizzaAdmin(admin.ModelAdmin):
     readonly_fields = ('toppings',)
 
@@ -446,7 +465,7 @@ class WorkHourAdmin(admin.ModelAdmin):
 
 
 class FoodDeliveryAdmin(admin.ModelAdmin):
-    list_display=('reference', 'driver', 'restaurant')
+    list_display = ('reference', 'driver', 'restaurant')
     list_editable = ('driver', 'restaurant')
 
 
@@ -548,14 +567,9 @@ class AlbumAdmin(admin.ModelAdmin):
     list_filter = ['title']
 
 
-class WorkHourAdmin(admin.ModelAdmin):
-    list_display = ('datum', 'employee')
-    list_filter = ('employee',)
-
-
 class PrePopulatedPostLargeSlugAdmin(admin.ModelAdmin):
     prepopulated_fields = {
-        'slug' : ('title',)
+        'slug': ('title',)
     }
 
 
@@ -642,12 +656,25 @@ class UndeletableObjectAdmin(admin.ModelAdmin):
         return super(UndeletableObjectAdmin, self).change_view(*args, **kwargs)
 
 
+class UnchangeableObjectAdmin(admin.ModelAdmin):
+    def get_urls(self):
+        # Disable change_view, but leave other urls untouched
+        urlpatterns = super(UnchangeableObjectAdmin, self).get_urls()
+        return [p for p in urlpatterns if not p.name.endswith("_change")]
+
+
 def callable_on_unknown(obj):
     return obj.unknown
 
 
 class AttributeErrorRaisingAdmin(admin.ModelAdmin):
     list_display = [callable_on_unknown, ]
+
+
+class CustomManagerAdmin(admin.ModelAdmin):
+    def get_queryset(self, request):
+        return FilteredManager.objects
+
 
 class MessageTestingAdmin(admin.ModelAdmin):
     actions = ["message_debug", "message_info", "message_success",
@@ -677,6 +704,36 @@ class ChoiceList(admin.ModelAdmin):
     readonly_fields = ['choice']
     fields = ['choice']
 
+
+# Tests for ticket 11277 ----------------------------------
+
+class FormWithoutHiddenField(forms.ModelForm):
+    first = forms.CharField()
+    second = forms.CharField()
+
+class FormWithoutVisibleField(forms.ModelForm):
+    first = forms.CharField(widget=forms.HiddenInput)
+    second = forms.CharField(widget=forms.HiddenInput)
+
+class FormWithVisibleAndHiddenField(forms.ModelForm):
+    first = forms.CharField(widget=forms.HiddenInput)
+    second = forms.CharField()
+
+class EmptyModelVisibleAdmin(admin.ModelAdmin):
+    form = FormWithoutHiddenField
+    fieldsets = (
+        (None, {
+            'fields': (('first', 'second'),),
+        }),
+    )
+
+class EmptyModelHiddenAdmin(admin.ModelAdmin):
+    form = FormWithoutVisibleField
+    fieldsets = EmptyModelVisibleAdmin.fieldsets
+
+class EmptyModelMixinAdmin(admin.ModelAdmin):
+    form = FormWithVisibleAndHiddenField
+    fieldsets = EmptyModelVisibleAdmin.fieldsets
 
 site = admin.AdminSite(name="admin")
 site.register(Article, ArticleAdmin)
@@ -727,6 +784,7 @@ site.register(Report, ReportAdmin)
 site.register(MainPrepopulated, MainPrepopulatedAdmin)
 site.register(UnorderedObject, UnorderedObjectAdmin)
 site.register(UndeletableObject, UndeletableObjectAdmin)
+site.register(UnchangeableObject, UnchangeableObjectAdmin)
 
 # We intentionally register Promo and ChapterXtra1 but not Chapter nor ChapterXtra2.
 # That way we cover all four cases:
@@ -736,17 +794,18 @@ site.register(UndeletableObject, UndeletableObjectAdmin)
 #     related OneToOne object not registered in admin
 # when deleting Book so as exercise all four troublesome (w.r.t escaping
 # and calling force_text to avoid problems on Python 2.3) paths through
-# contrib.admin.util's get_deleted_objects function.
+# contrib.admin.utils's get_deleted_objects function.
 site.register(Book, inlines=[ChapterInline])
 site.register(Promo)
 site.register(ChapterXtra1, ChapterXtra1Admin)
 site.register(Pizza, PizzaAdmin)
-site.register(Topping)
+site.register(Topping, ToppingAdmin)
 site.register(Album, AlbumAdmin)
 site.register(Question)
 site.register(Answer)
 site.register(PrePopulatedPost, PrePopulatedPostAdmin)
 site.register(ComplexSortedPerson, ComplexSortedPersonAdmin)
+site.register(FilteredManager, CustomManagerAdmin)
 site.register(PluggableSearchPerson, PluggableSearchPersonAdmin)
 site.register(PrePopulatedPostLargeSlug, PrePopulatedPostLargeSlugAdmin)
 site.register(AdminOrderedField, AdminOrderedFieldAdmin)
@@ -757,9 +816,17 @@ site.register(Color2, CustomTemplateFilterColorAdmin)
 site.register(Simple, AttributeErrorRaisingAdmin)
 site.register(UserMessenger, MessageTestingAdmin)
 site.register(Choice, ChoiceList)
+site.register(EmptyModelHidden, EmptyModelHiddenAdmin)
+site.register(EmptyModelVisible, EmptyModelVisibleAdmin)
+site.register(EmptyModelMixin, EmptyModelMixinAdmin)
 
 # Register core models we need in our tests
 from django.contrib.auth.models import User, Group
 from django.contrib.auth.admin import UserAdmin, GroupAdmin
 site.register(User, UserAdmin)
 site.register(Group, GroupAdmin)
+
+# Used to test URL namespaces
+site2 = admin.AdminSite(name="namespaced_admin")
+site2.register(User, UserAdmin)
+site2.register(Group, GroupAdmin)

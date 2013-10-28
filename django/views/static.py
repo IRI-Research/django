@@ -9,15 +9,12 @@ import os
 import stat
 import posixpath
 import re
-try:
-    from urllib.parse import unquote
-except ImportError:     # Python 2
-    from urllib import unquote
 
-from django.http import (CompatibleStreamingHttpResponse, Http404,
-    HttpResponse, HttpResponseRedirect, HttpResponseNotModified)
+from django.http import (Http404, HttpResponse, HttpResponseRedirect,
+    HttpResponseNotModified, StreamingHttpResponse)
 from django.template import loader, Template, Context, TemplateDoesNotExist
 from django.utils.http import http_date, parse_http_date
+from django.utils.six.moves.urllib.parse import unquote
 from django.utils.translation import ugettext as _, ugettext_noop
 
 def serve(request, path, document_root=None, show_indexes=False):
@@ -26,7 +23,7 @@ def serve(request, path, document_root=None, show_indexes=False):
 
     To use, put a URL pattern such as::
 
-        (r'^(?P<path>.*)$', 'django.views.static.serve', {'document_root' : '/path/to/my/files/'})
+        (r'^(?P<path>.*)$', 'django.views.static.serve', {'document_root': '/path/to/my/files/'})
 
     in your URLconf. You must provide the ``document_root`` param. You may
     also set ``show_indexes`` to ``True`` if you'd like to serve a basic index
@@ -63,8 +60,8 @@ def serve(request, path, document_root=None, show_indexes=False):
         return HttpResponseNotModified()
     content_type, encoding = mimetypes.guess_type(fullpath)
     content_type = content_type or 'application/octet-stream'
-    response = CompatibleStreamingHttpResponse(open(fullpath, 'rb'),
-                                               content_type=content_type)
+    response = StreamingHttpResponse(open(fullpath, 'rb'),
+                                     content_type=content_type)
     response["Last-Modified"] = http_date(statobj.st_mtime)
     if stat.S_ISREG(statobj.st_mode):
         response["Content-Length"] = statobj.st_size
@@ -111,8 +108,8 @@ def directory_index(path, fullpath):
                 f += '/'
             files.append(f)
     c = Context({
-        'directory' : path + '/',
-        'file_list' : files,
+        'directory': path + '/',
+        'file_list': files,
     })
     return HttpResponse(t.render(c))
 

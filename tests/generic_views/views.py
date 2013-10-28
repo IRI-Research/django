@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import unicode_literals
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -92,6 +92,14 @@ class NaiveAuthorCreate(generic.CreateView):
     fields = '__all__'
 
 
+class TemplateResponseWithoutTemplate(generic.detail.SingleObjectTemplateResponseMixin, generic.View):
+    # we don't define the usual template_name here
+
+    def __init__(self):
+        # Dummy object, but attr is required by get_template_name()
+        self.object = None
+
+
 class AuthorCreate(generic.CreateView):
     model = Author
     success_url = '/list/authors/'
@@ -105,7 +113,7 @@ class SpecializedAuthorCreate(generic.CreateView):
     context_object_name = 'thingy'
 
     def get_success_url(self):
-        return reverse('author_detail', args=[self.object.id,])
+        return reverse('author_detail', args=[self.object.id])
 
 
 class AuthorCreateRestricted(AuthorCreate):
@@ -143,7 +151,7 @@ class SpecializedAuthorUpdate(generic.UpdateView):
     context_object_name = 'thingy'
 
     def get_success_url(self):
-        return reverse('author_detail', args=[self.object.id,])
+        return reverse('author_detail', args=[self.object.id])
 
 
 class NaiveAuthorDelete(generic.DeleteView):
@@ -197,7 +205,7 @@ class AuthorGetQuerySetFormView(generic.edit.ModelFormMixin):
 
 class BookDetailGetObjectCustomQueryset(BookDetail):
     def get_object(self, queryset=None):
-        return super(BookDetailGetObjectCustomQueryset,self).get_object(
+        return super(BookDetailGetObjectCustomQueryset, self).get_object(
             queryset=Book.objects.filter(pk=2))
 
 
@@ -234,6 +242,7 @@ class BookSigningConfig(object):
     model = BookSigning
     date_field = 'event_date'
     # use the same templates as for books
+
     def get_template_names(self):
         return ['generic_views/book%s.html' % self.template_name_suffix]
 

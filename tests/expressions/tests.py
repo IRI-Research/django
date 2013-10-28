@@ -1,7 +1,8 @@
-from __future__ import absolute_import, unicode_literals
+from __future__ import unicode_literals
 
 from django.core.exceptions import FieldError
 from django.db.models import F
+from django.db import transaction
 from django.test import TestCase
 from django.utils import six
 
@@ -185,11 +186,11 @@ class ExpressionsTests(TestCase):
             "foo",
         )
 
-        self.assertRaises(FieldError,
-            lambda: Company.objects.exclude(
-                ceo__firstname=F('point_of_contact__firstname')
-            ).update(name=F('point_of_contact__lastname'))
-        )
+        with transaction.atomic():
+            with self.assertRaises(FieldError):
+                Company.objects.exclude(
+                    ceo__firstname=F('point_of_contact__firstname')
+                ).update(name=F('point_of_contact__lastname'))
 
         # F expressions can be used to update attributes on single objects
         test_gmbh = Company.objects.get(name="Test GmbH")
@@ -204,6 +205,7 @@ class ExpressionsTests(TestCase):
         test_gmbh.point_of_contact = None
         test_gmbh.save()
         self.assertTrue(test_gmbh.point_of_contact is None)
+
         def test():
             test_gmbh.point_of_contact = F("ceo")
         self.assertRaises(ValueError, test)

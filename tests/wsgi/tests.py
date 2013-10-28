@@ -1,5 +1,7 @@
 from __future__ import unicode_literals
 
+import unittest
+
 from django.core.exceptions import ImproperlyConfigured
 from django.core.servers.basehttp import get_internal_wsgi_application
 from django.core.signals import request_started
@@ -8,7 +10,7 @@ from django.db import close_old_connections
 from django.test import TestCase
 from django.test.client import RequestFactory
 from django.test.utils import override_settings
-from django.utils import six, unittest
+from django.utils import six
 
 
 class WSGITest(TestCase):
@@ -32,7 +34,7 @@ class WSGITest(TestCase):
             PATH_INFO="/",
             CONTENT_TYPE="text/html; charset=utf-8",
             REQUEST_METHOD="GET"
-            )
+        )
 
         response_data = {}
 
@@ -65,7 +67,6 @@ class GetInternalWSGIApplicationTest(unittest.TestCase):
 
         self.assertTrue(app is application)
 
-
     @override_settings(WSGI_APPLICATION=None)
     def test_default(self):
         """
@@ -75,6 +76,7 @@ class GetInternalWSGIApplicationTest(unittest.TestCase):
         """
         # Mock out get_wsgi_application so we know its return value is used
         fake_app = object()
+
         def mock_get_wsgi_app():
             return fake_app
         from django.core.servers import basehttp
@@ -88,7 +90,6 @@ class GetInternalWSGIApplicationTest(unittest.TestCase):
         finally:
             basehttp.get_wsgi_application = _orig_get_wsgi_app
 
-
     @override_settings(WSGI_APPLICATION="wsgi.noexist.app")
     def test_bad_module(self):
         with six.assertRaisesRegex(self,
@@ -96,7 +97,6 @@ class GetInternalWSGIApplicationTest(unittest.TestCase):
             r"^WSGI application 'wsgi.noexist.app' could not be loaded; Error importing.*"):
 
             get_internal_wsgi_application()
-
 
     @override_settings(WSGI_APPLICATION="wsgi.wsgi.noexist")
     def test_bad_name(self):

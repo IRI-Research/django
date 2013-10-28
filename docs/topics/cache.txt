@@ -39,6 +39,8 @@ Django also works well with "upstream" caches, such as `Squid
 caches that you don't directly control but to which you can provide hints (via
 HTTP headers) about which parts of your site should be cached, and how.
 
+.. _setting-up-the-cache:
+
 Setting up the cache
 ====================
 
@@ -152,25 +154,23 @@ permanent storage -- they're all intended to be solutions for caching, not
 storage -- but we point this out here because memory-based caching is
 particularly temporary.
 
+.. _database-caching:
+
 Database caching
 ----------------
 
-To use a database table as your cache backend, first create a cache table in
-your database by running this command::
+Django can store its cached data in your database. This works best if you've
+got a fast, well-indexed database server.
 
-    python manage.py createcachetable [cache_table_name]
+To use a database table as your cache backend:
 
-...where ``[cache_table_name]`` is the name of the database table to create.
-(This name can be whatever you want, as long as it's a valid table name that's
-not already being used in your database.) This command creates a single table
-in your database that is in the proper format that Django's database-cache
-system expects.
+    * Set :setting:`BACKEND <CACHES-BACKEND>` to
+      ``django.core.cache.backends.db.DatabaseCache``
+    * Set :setting:`LOCATION <CACHES-LOCATION>` to ``tablename``, the name of
+      the database table. This name can be whatever you want, as long as it's
+      a valid table name that's not already being used in your database.
 
-Once you've created that database table, set your
-:setting:`BACKEND <CACHES-BACKEND>` setting to
-``"django.core.cache.backends.db.DatabaseCache"``, and
-:setting:`LOCATION <CACHES-LOCATION>` to ``tablename`` -- the name of the
-database table. In this example, the cache table's name is ``my_cache_table``::
+In this example, the cache table's name is ``my_cache_table``::
 
     CACHES = {
         'default': {
@@ -179,14 +179,36 @@ database table. In this example, the cache table's name is ``my_cache_table``::
         }
     }
 
+Creating the cache table
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-The database caching backend uses the same database as specified in your
-settings file. You can't use a different database backend for your cache table.
+Before using the database cache, you must create the cache table with this
+command::
 
-Database caching works best if you've got a fast, well-indexed database server.
+    python manage.py createcachetable
 
-Database caching and multiple databases
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+This creates a table in your database that is in the proper format that
+Django's database-cache system expects. The name of the table is taken from
+:setting:`LOCATION <CACHES-LOCATION>`.
+
+If you are using multiple database caches, :djadmin:`createcachetable` creates
+one table for each cache.
+
+If you are using multiple databases, :djadmin:`createcachetable` observes the
+``allow_migrate()`` method of your database routers (see below).
+
+Like :djadmin:`migrate`, :djadmin:`createcachetable` won't touch an existing
+table. It will only create missing tables.
+
+.. versionchanged:: 1.7
+
+    Before Django 1.7, :djadmin:`createcachetable` created one table at a time.
+    You had to pass the name of the table you wanted to create, and if you were
+    using multiple databases, you had to use the :djadminopt:`--database`
+    option. For backwards compatibility, this is still possible.
+
+Multiple databases
+~~~~~~~~~~~~~~~~~~
 
 If you use database caching with multiple databases, you'll also need
 to set up routing instructions for your database cache table. For the
@@ -215,8 +237,8 @@ operations to ``cache_slave``, and all write operations to
                 return 'cache_master'
             return None
 
-        def allow_syncdb(self, db, model):
-            "Only synchronize the cache model on master"
+        def allow_migrate(self, db, model):
+            "Only install the cache model on master"
             if model._meta.app_label in ('django_cache',):
                 return db == 'cache_master'
             return None
@@ -337,40 +359,37 @@ been well-tested and are easy to use.
 Cache arguments
 ---------------
 
-In addition to the defining the engine and name of the each cache
-backend, each cache backend can be given additional arguments to
-control caching behavior. These arguments are provided as additional
-keys in the :setting:`CACHES` setting. Valid arguments are as follows:
+Each cache backend can be given additional arguments to control caching
+behavior. These arguments are provided as additional keys in the
+:setting:`CACHES` setting. Valid arguments are as follows:
 
 * :setting:`TIMEOUT <CACHES-TIMEOUT>`: The default timeout, in
-  seconds, to use for the cache. This argument defaults to 300
+  seconds, to use for the cache. This argument defaults to ``300``
   seconds (5 minutes).
 
 * :setting:`OPTIONS <CACHES-OPTIONS>`: Any options that should be
-  passed to cache backend. The list options understood by each
-  backend vary with each backend.
+  passed to the cache backend. The list of valid options will vary
+  with each backend, and cache backends backed by a third-party library
+  will pass their options directly to the underlying cache library.
 
   Cache backends that implement their own culling strategy (i.e.,
   the ``locmem``, ``filesystem`` and ``database`` backends) will
   honor the following options:
 
-  * ``MAX_ENTRIES``: the maximum number of entries allowed in
+  * ``MAX_ENTRIES``: The maximum number of entries allowed in
     the cache before old values are deleted. This argument
     defaults to ``300``.
 
   * ``CULL_FREQUENCY``: The fraction of entries that are culled
     when ``MAX_ENTRIES`` is reached. The actual ratio is
-    ``1/CULL_FREQUENCY``, so set ``CULL_FREQUENCY``: to ``2`` to
-    cull half of the entries when ``MAX_ENTRIES`` is reached.
+    ``1 / CULL_FREQUENCY``, so set ``CULL_FREQUENCY`` to ``2`` to
+    cull half the entries when ``MAX_ENTRIES`` is reached. This argument
+    should be an integer and defaults to ``3``.
 
     A value of ``0`` for ``CULL_FREQUENCY`` means that the
     entire cache will be dumped when ``MAX_ENTRIES`` is reached.
-    This makes culling *much* faster at the expense of more
-    cache misses.
-
-  Cache backends backed by a third-party library will pass their
-  options directly to the underlying cache library. As a result,
-  the list of valid options depends on the library in use.
+    On some backends (``database`` in particular) this makes culling *much*
+    faster at the expense of more cache misses.
 
 * :setting:`KEY_PREFIX <CACHES-KEY_PREFIX>`: A string that will be
   automatically included (prepended by default) to all cache keys
@@ -632,6 +651,19 @@ equivalent:
 
 This feature is useful in avoiding repetition in templates. You can set the
 timeout in a variable, in one place, and just reuse that value.
+
+.. versionadded:: 1.7
+
+    By default, the cache tag will try to use the cache called
+    "template_fragments". If no such cache exists, it will fall back to using
+    the default cache. You may select an alternate cache backend to use with
+    the ``using`` keyword argument, which must be the last argument to the tag.
+
+.. code-block:: html+django
+
+    {% cache 300 local-thing ...  using="localcache" %}
+
+It is considered an error to specify a cache name that is not configured.
 
 .. function:: django.core.cache.utils.make_template_fragment_key(fragment_name, vary_on=None)
 
@@ -997,8 +1029,8 @@ produces different content based on some difference in request headers -- such
 as a cookie, or a language, or a user-agent -- you'll need to use the ``Vary``
 header to tell caching mechanisms that the page output depends on those things.
 
-To do this in Django, use the convenient ``vary_on_headers`` view decorator,
-like so::
+To do this in Django, use the convenient
+:func:`django.views.decorators.vary.vary_on_headers` view decorator, like so::
 
     from django.views.decorators.vary import vary_on_headers
 
@@ -1027,8 +1059,9 @@ the user-agent ``Mozilla`` and the cookie value ``foo=bar`` will be considered
 different from a request with the user-agent ``Mozilla`` and the cookie value
 ``foo=ham``.
 
-Because varying on cookie is so common, there's a ``vary_on_cookie``
-decorator. These two views are equivalent::
+Because varying on cookie is so common, there's a
+:func:`django.views.decorators.vary.vary_on_cookie` decorator. These two views
+are equivalent::
 
     @vary_on_cookie
     def my_view(request):
@@ -1041,7 +1074,7 @@ decorator. These two views are equivalent::
 The headers you pass to ``vary_on_headers`` are not case sensitive;
 ``"User-Agent"`` is the same thing as ``"user-agent"``.
 
-You can also use a helper function, ``django.utils.cache.patch_vary_headers``,
+You can also use a helper function, :func:`django.utils.cache.patch_vary_headers`,
 directly. This function sets, or adds to, the ``Vary header``. For example::
 
     from django.utils.cache import patch_vary_headers
@@ -1090,8 +1123,9 @@ exclusive. The decorator ensures that the "public" directive is removed if
 "private" should be set (and vice versa). An example use of the two directives
 would be a blog site that offers both private and public entries. Public
 entries may be cached on any shared cache. The following code uses
-``patch_cache_control``, the manual way to modify the cache control header
-(it is internally called by the ``cache_control`` decorator)::
+:func:`django.utils.cache.patch_cache_control`, the manual way to modify the
+cache control header (it is internally called by the ``cache_control``
+decorator)::
 
     from django.views.decorators.cache import patch_cache_control
     from django.views.decorators.vary import vary_on_cookie
@@ -1158,19 +1192,6 @@ Example::
         # ...
 
 .. _`Cache-Control spec`: http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9
-
-Other optimizations
-===================
-
-Django comes with a few other pieces of middleware that can help optimize your
-site's performance:
-
-* ``django.middleware.http.ConditionalGetMiddleware`` adds support for
-  modern browsers to conditionally GET responses based on the ``ETag``
-  and ``Last-Modified`` headers.
-
-* :class:`django.middleware.gzip.GZipMiddleware` compresses responses for all
-  modern browsers, saving bandwidth and transfer time.
 
 Order of MIDDLEWARE_CLASSES
 ===========================

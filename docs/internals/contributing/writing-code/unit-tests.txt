@@ -25,15 +25,27 @@ Quickstart
 ~~~~~~~~~~
 
 Running the tests requires a Django settings module that defines the
-databases to use. To make it easy to get started, Django provides a
-sample settings module that uses the SQLite database. To run the tests
-with this sample ``settings`` module:
+databases to use. To make it easy to get started, Django provides and uses a
+sample settings module that uses the SQLite database. To run the tests:
 
 .. code-block:: bash
 
     git clone git@github.com:django/django.git django-repo
     cd django-repo/tests
+    PYTHONPATH=..:$PYTHONPATH ./runtests.py
+
+.. versionchanged:: 1.7
+
+Older versions of Django required specifying a settings file::
+
     PYTHONPATH=..:$PYTHONPATH python ./runtests.py --settings=test_sqlite
+
+``runtests.py`` now uses ``test_sqlite`` by default if settings aren't provided
+through either ``--settings`` or :envvar:`DJANGO_SETTINGS_MODULE`.
+
+You can avoid typing the ``PYTHONPATH`` bit each time by adding your Django
+checkout to your ``PYTHONPATH`` or by installing the source checkout using pip.
+See :ref:`installing-development-version`.
 
 .. _running-unit-tests-settings:
 
@@ -54,17 +66,17 @@ two databases:
 * A ``default`` database. This database should use the backend that
   you want to use for primary testing
 
-* A database with the alias ``other``. The ``other`` database is
-  used to establish that queries can be directed to different
-  databases. As a result, this database can use any backend you
-  want. It doesn't need to use the same backend as the ``default``
-  database (although it can use the same backend if you want to).
+* A database with the alias ``other``. The ``other`` database is used to
+  establish that queries can be directed to different databases. As a result,
+  this database can use any backend you want. It doesn't need to use the same
+  backend as the ``default`` database (although it can use the same backend if
+  you want to). It cannot be the same database as the ``default``.
 
 If you're using a backend that isn't SQLite, you will need to provide other
 details for each database:
 
-* The :setting:`USER` option for each of your databases needs to
-  specify an existing user account for the database.
+* The :setting:`USER` option needs to specify an existing user account
+  for the database.
 
 * The :setting:`PASSWORD` option needs to provide the password for
   the :setting:`USER` that has been specified.
@@ -107,13 +119,13 @@ of the ``i18n`` module, type:
 
 .. code-block:: bash
 
-    ./runtests.py --settings=path.to.settings i18n.TranslationTests
+    ./runtests.py --settings=path.to.settings i18n.tests.TranslationTests
 
 Going beyond that, you can specify an individual test method like this:
 
 .. code-block:: bash
 
-    ./runtests.py --settings=path.to.settings i18n.TranslationTests.test_lazy_objects
+    ./runtests.py --settings=path.to.settings i18n.tests.TranslationTests.test_lazy_objects
 
 Running the Selenium tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -136,23 +148,44 @@ Running all the tests
 If you want to run the full suite of tests, you'll need to install a number of
 dependencies:
 
+*  bcrypt_
+*  docutils_
+*  Pillow_
 *  PyYAML_
+*  pytz_
 *  setuptools_
 *  memcached_, plus a :ref:`supported Python binding <memcached>`
 *  gettext_ (:ref:`gettext_on_windows`)
-*  selenium_ (if also using Python >= 2.6)
+*  selenium_
+
+You can find these dependencies in `pip requirements files`_ inside the
+``tests/requirements`` directory of the Django source tree and install them
+like so::
+
+    pip install -r tests/requirements/py2.txt  # Python 3: py3.txt
+
+You can also install the database adapter(s) of your choice using
+``oracle.txt``, ``mysql.txt``, or ``postgres.txt``.
 
 If you want to test the memcached cache backend, you'll also need to define
 a :setting:`CACHES` setting that points at your memcached instance.
 
+To run the GeoDjango tests, you will need to :doc:`setup a spatial database
+and install the Geospatial libraries</ref/contrib/gis/install/index>`.
+
 Each of these dependencies is optional. If you're missing any of them, the
 associated tests will be skipped.
 
+.. _bcrypt: https://pypi.python.org/pypi/bcrypt
+.. _docutils: https://pypi.python.org/pypi/docutils
+.. _Pillow: https://pypi.python.org/pypi/Pillow/
 .. _PyYAML: http://pyyaml.org/wiki/PyYAML
+.. _pytz: https://pypi.python.org/pypi/pytz/
 .. _setuptools: http://pypi.python.org/pypi/setuptools/
 .. _memcached: http://memcached.org/
 .. _gettext: http://www.gnu.org/software/gettext/manual/gettext.html
 .. _selenium: http://pypi.python.org/pypi/selenium
+.. _pip requirements files: http://www.pip-installer.org/en/latest/requirements.html
 
 Code coverage
 ~~~~~~~~~~~~~
@@ -189,4 +222,4 @@ If you have URLs that need to be mapped, put them in ``tests/urls.py``.
 To run tests for just one contrib app (e.g. ``auth``), use the same
 method as above::
 
-    ./runtests.py --settings=settings auth
+    ./runtests.py --settings=settings django.contrib.auth

@@ -3,8 +3,9 @@ Distance and Area objects to allow for sensible and convienient calculation
 and conversions. Here are some tests.
 """
 
+import unittest
+
 from django.contrib.gis.measure import Distance, Area, D, A
-from django.utils import unittest
 
 
 class DistanceTest(unittest.TestCase):
@@ -30,7 +31,6 @@ class DistanceTest(unittest.TestCase):
         for d in (mm1, mm2):
             self.assertEqual(d.m, 1.0)
             self.assertEqual(d.mm, 1000.0)
-
 
     def testInitInvalid(self):
         "Testing initialisation from invalid units"
@@ -63,20 +63,16 @@ class DistanceTest(unittest.TestCase):
         self.assertEqual(d4.m, -200)
 
         with self.assertRaises(TypeError):
-            d5 = d1 + 1
-            self.fail('Distance + number should raise TypeError')
+            d1 + 1
 
         with self.assertRaises(TypeError):
-            d5 = d1 - 1
-            self.fail('Distance - number should raise TypeError')
+            d1 - 1
 
         with self.assertRaises(TypeError):
             d1 += 1
-            self.fail('Distance += number should raise TypeError')
 
         with self.assertRaises(TypeError):
             d1 -= 1
-            self.fail('Distance -= number should raise TypeError')
 
     def testMultiplication(self):
         "Test multiplication & division"
@@ -102,11 +98,9 @@ class DistanceTest(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             d1 *= D(m=1)
-            self.fail('Distance *= Distance should raise TypeError')
 
         with self.assertRaises(TypeError):
             d1 /= D(m=1)
-            self.fail('Distance /= Distance should raise TypeError')
 
     def testUnitConversions(self):
         "Testing default units during maths"
@@ -195,20 +189,16 @@ class AreaTest(unittest.TestCase):
         self.assertEqual(a4.sq_m, -200)
 
         with self.assertRaises(TypeError):
-            a5 = a1 + 1
-            self.fail('Area + number should raise TypeError')
+            a1 + 1
 
         with self.assertRaises(TypeError):
-            a5 = a1 - 1
-            self.fail('Area - number should raise TypeError')
+            a1 - 1
 
         with self.assertRaises(TypeError):
             a1 += 1
-            self.fail('Area += number should raise TypeError')
 
         with self.assertRaises(TypeError):
             a1 -= 1
-            self.fail('Area -= number should raise TypeError')
 
     def testMultiplication(self):
         "Test multiplication & division"
@@ -227,20 +217,16 @@ class AreaTest(unittest.TestCase):
         self.assertEqual(a4.sq_m, 10)
 
         with self.assertRaises(TypeError):
-            a5 = a1 * A(sq_m=1)
-            self.fail('Area * Area should raise TypeError')
+            a1 * A(sq_m=1)
 
         with self.assertRaises(TypeError):
             a1 *= A(sq_m=1)
-            self.fail('Area *= Area should raise TypeError')
 
         with self.assertRaises(TypeError):
-            a5 = a1 / A(sq_m=1)
-            self.fail('Area / Area should raise TypeError')
+            a1 / A(sq_m=1)
 
         with self.assertRaises(TypeError):
             a1 /= A(sq_m=1)
-            self.fail('Area /= Area should raise TypeError')
 
     def testUnitConversions(self):
         "Testing default units during maths"
@@ -286,5 +272,5 @@ def suite():
 def run(verbosity=2):
     unittest.TextTestRunner(verbosity=verbosity).run(suite())
 
-if __name__=="__main__":
+if __name__ == "__main__":
     run()

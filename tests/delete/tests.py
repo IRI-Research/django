@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import unicode_literals
 
 from django.db import models, IntegrityError, connection
 from django.test import TestCase, skipUnlessDBFeature, skipIfDBFeature
@@ -65,6 +65,7 @@ class OnDeleteTests(TestCase):
         # Testing DO_NOTHING is a bit harder: It would raise IntegrityError for a normal model,
         # so we connect to pre_delete and set the fk to a known value.
         replacement_r = R.objects.create()
+
         def check_do_nothing(sender, **kwargs):
             obj = kwargs['instance']
             obj.donothing_set.update(donothing=replacement_r)
@@ -178,6 +179,7 @@ class DeletionTests(TestCase):
     def test_instance_update(self):
         deleted = []
         related_setnull_sets = []
+
         def pre_delete(sender, **kwargs):
             obj = kwargs['instance']
             deleted.append(obj)
@@ -216,8 +218,8 @@ class DeletionTests(TestCase):
         r = R.objects.create(pk=1)
         s1 = S.objects.create(pk=1, r=r)
         s2 = S.objects.create(pk=2, r=r)
-        t1 = T.objects.create(pk=1, s=s1)
-        t2 = T.objects.create(pk=2, s=s2)
+        T.objects.create(pk=1, s=s1)
+        T.objects.create(pk=2, s=s2)
         r.delete()
         self.assertEqual(
             pre_delete_order, [(T, 2), (T, 1), (S, 2), (S, 1), (R, 1)]
@@ -264,6 +266,7 @@ class DeletionTests(TestCase):
 
         # Attach a signal to make sure we will not do fast_deletes.
         calls = []
+
         def noop(*args, **kwargs):
             calls.append('')
         models.signals.post_delete.connect(noop, sender=User)
@@ -281,6 +284,7 @@ class DeletionTests(TestCase):
         )
         # Attach a signal to make sure we will not do fast_deletes.
         calls = []
+
         def noop(*args, **kwargs):
             calls.append('')
         models.signals.post_delete.connect(noop, sender=User)
@@ -302,7 +306,7 @@ class DeletionTests(TestCase):
     def test_hidden_related(self):
         r = R.objects.create()
         h = HiddenUser.objects.create(r=r)
-        p = HiddenUserProfile.objects.create(user=h)
+        HiddenUserProfile.objects.create(user=h)
 
         r.delete()
         self.assertEqual(HiddenUserProfile.objects.count(), 0)

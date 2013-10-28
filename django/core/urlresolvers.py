@@ -8,6 +8,7 @@ a string) and returns a tuple in this format:
 """
 from __future__ import unicode_literals
 
+from importlib import import_module
 import re
 from threading import local
 
@@ -17,7 +18,6 @@ from django.utils.datastructures import MultiValueDict
 from django.utils.encoding import force_str, force_text, iri_to_uri
 from django.utils.functional import memoize, lazy
 from django.utils.http import urlquote
-from django.utils.importlib import import_module
 from django.utils.module_loading import module_has_submodule
 from django.utils.regex_helper import normalize
 from django.utils import six
@@ -62,7 +62,7 @@ class ResolverMatch(object):
 
     @property
     def view_name(self):
-        return ':'.join([ x for x in [ self.namespace, self.url_name ]  if x ])
+        return ':'.join(filter(bool, (self.namespace, self.url_name)))
 
     def __getitem__(self, index):
         return (self.func, self.args, self.kwargs)[index]
@@ -75,8 +75,7 @@ class Resolver404(Http404):
     pass
 
 class NoReverseMatch(Exception):
-    # Don't make this raise an error when used in a template.
-    silent_variable_failure = True
+    pass
 
 def get_callable(lookup_view, can_fail=False):
     """
@@ -156,7 +155,6 @@ class LocaleRegexProvider(object):
         # expression.
         self._regex = regex
         self._regex_dict = {}
-
 
     @property
     def regex(self):
@@ -275,7 +273,7 @@ class RegexURLResolver(LocaleRegexProvider):
                         for matches, pat, defaults in pattern.reverse_dict.getlist(name):
                             new_matches = []
                             for piece, p_args in parent:
-                                new_matches.extend([(piece + suffix, p_args + args) for (suffix, args) in matches])
+                                new_matches.extend((piece + suffix, p_args + args) for (suffix, args) in matches)
                             lookups.appendlist(name, (new_matches, p_pattern + pat, dict(defaults, **pattern.default_kwargs)))
                     for namespace, (prefix, sub_pattern) in pattern.namespace_dict.items():
                         namespaces[namespace] = (p_pattern + prefix, sub_pattern)
@@ -312,6 +310,7 @@ class RegexURLResolver(LocaleRegexProvider):
         return self._app_dict[language_code]
 
     def resolve(self, path):
+        path = force_text(path)  # path may be a reverse_lazy object
         tried = []
         match = self.regex.search(path)
         if match:
@@ -322,7 +321,7 @@ class RegexURLResolver(LocaleRegexProvider):
                 except Resolver404 as e:
                     sub_tried = e.args[0].get('tried')
                     if sub_tried is not None:
-                        tried.extend([[pattern] + t for t in sub_tried])
+                        tried.extend([pattern] + t for t in sub_tried)
                     else:
                         tried.append([pattern])
                 else:
@@ -332,7 +331,7 @@ class RegexURLResolver(LocaleRegexProvider):
                         return ResolverMatch(sub_match.func, sub_match.args, sub_match_dict, sub_match.url_name, self.app_name or sub_match.app_name, [self.namespace] + sub_match.namespaces)
                     tried.append([pattern])
             raise Resolver404({'tried': tried, 'path': new_path})
-        raise Resolver404({'path' : path})
+        raise Resolver404({'path': path})
 
     @property
     def urlconf_module(self):
@@ -359,6 +358,9 @@ class RegexURLResolver(LocaleRegexProvider):
             from django.conf import urls
             callback = getattr(urls, 'handler%s' % view_type)
         return get_callable(callback), {}
+
+    def resolve400(self):
+        return self._resolve_special('400')
 
     def resolve403(self):
         return self._resolve_special('403')
@@ -420,8 +422,11 @@ class RegexURLResolver(LocaleRegexProvider):
             lookup_view_s = "%s.%s" % (m, n)
         else:
             lookup_view_s = lookup_view
+
+        patterns = [pattern for (possibility, pattern, defaults) in possibilities]
         raise NoReverseMatch("Reverse for '%s' with arguments '%s' and keyword "
-                "arguments '%s' not found." % (lookup_view_s, args, kwargs))
+                "arguments '%s' not found. %d pattern(s) tried: %s" %
+                             (lookup_view_s, args, kwargs, len(patterns), patterns))
 
 class LocaleRegexURLResolver(RegexURLResolver):
     """

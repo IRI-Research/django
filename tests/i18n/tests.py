@@ -1,23 +1,22 @@
 # -*- encoding: utf-8 -*-
-from __future__ import absolute_import, unicode_literals
+from __future__ import unicode_literals
 
 import datetime
 import decimal
+from importlib import import_module
 import os
 import pickle
 from threading import local
 
 from django.conf import settings
-from django.core.management.utils import find_command
 from django.template import Template, Context
 from django.template.base import TemplateSyntaxError
 from django.test import TestCase, RequestFactory
-from django.test.utils import override_settings
+from django.test.utils import override_settings, TransRealMixin
 from django.utils import translation
 from django.utils.formats import (get_format, date_format, time_format,
     localize, localize_input, iter_format_modules, get_format_modules,
     number_format, reset_format_cache, sanitize_separators)
-from django.utils.importlib import import_module
 from django.utils.numberformat import format as nformat
 from django.utils._os import upath
 from django.utils.safestring import mark_safe, SafeBytes, SafeString, SafeText
@@ -34,17 +33,6 @@ from django.utils.translation import (activate, deactivate,
     npgettext, npgettext_lazy,
     check_for_language)
 
-if find_command('xgettext'):
-    from .commands.extraction import (ExtractorTests, BasicExtractorTests,
-        JavascriptExtractorTests, IgnoredExtractorTests, SymlinkExtractorTests,
-        CopyPluralFormsExtractorTests, NoWrapExtractorTests,
-        NoLocationExtractorTests, KeepPotFileExtractorTests,
-        MultipleLocaleExtractionTests)
-if find_command('msgfmt'):
-    from .commands.compilation import (PoFileTests, PoFileContentsTests,
-        PercentRenderingTests, MultipleLocaleCompilationTests,
-        CompilationErrorHandling)
-from . import TransRealMixin
 from .forms import I18nForm, SelectDateForm, SelectDateWidget, CompanyForm
 from .models import Company, TestModel
 
@@ -89,7 +77,7 @@ class TranslationTests(TransRealMixin, TestCase):
         s4 = ugettext_lazy('Some other string')
         self.assertEqual(False, s == s4)
 
-        if not six.PY3:
+        if six.PY2:
             # On Python 2, gettext_lazy should not transform a bytestring to unicode
             self.assertEqual(gettext_lazy(b"test").upper(), b"TEST")
 
@@ -261,7 +249,6 @@ class TranslationTests(TransRealMixin, TestCase):
             self.assertRaises(TemplateSyntaxError, Template, '{% load i18n %}{% blocktrans context with month="May" %}{{ month }}{% endblocktrans %}')
             self.assertRaises(TemplateSyntaxError, Template, '{% load i18n %}{% blocktrans context %}{% endblocktrans %}')
             self.assertRaises(TemplateSyntaxError, Template, '{% load i18n %}{% blocktrans count number=2 context %}{{ number }} super result{% plural %}{{ number }} super results{% endblocktrans %}')
-
 
     def test_string_concat(self):
         """
@@ -601,8 +588,8 @@ class FormattingTests(TransRealMixin, TestCase):
         # Russian locale (with E as month)
         with translation.override('ru', deactivate=True):
             self.assertHTMLEqual(
-                    '<select name="mydate_day" id="id_mydate_day">\n<option value="1">1</option>\n<option value="2">2</option>\n<option value="3">3</option>\n<option value="4">4</option>\n<option value="5">5</option>\n<option value="6">6</option>\n<option value="7">7</option>\n<option value="8">8</option>\n<option value="9">9</option>\n<option value="10">10</option>\n<option value="11">11</option>\n<option value="12">12</option>\n<option value="13">13</option>\n<option value="14">14</option>\n<option value="15">15</option>\n<option value="16">16</option>\n<option value="17">17</option>\n<option value="18">18</option>\n<option value="19">19</option>\n<option value="20">20</option>\n<option value="21">21</option>\n<option value="22">22</option>\n<option value="23">23</option>\n<option value="24">24</option>\n<option value="25">25</option>\n<option value="26">26</option>\n<option value="27">27</option>\n<option value="28">28</option>\n<option value="29">29</option>\n<option value="30">30</option>\n<option value="31" selected="selected">31</option>\n</select>\n<select name="mydate_month" id="id_mydate_month">\n<option value="1">\u042f\u043d\u0432\u0430\u0440\u044c</option>\n<option value="2">\u0424\u0435\u0432\u0440\u0430\u043b\u044c</option>\n<option value="3">\u041c\u0430\u0440\u0442</option>\n<option value="4">\u0410\u043f\u0440\u0435\u043b\u044c</option>\n<option value="5">\u041c\u0430\u0439</option>\n<option value="6">\u0418\u044e\u043d\u044c</option>\n<option value="7">\u0418\u044e\u043b\u044c</option>\n<option value="8">\u0410\u0432\u0433\u0443\u0441\u0442</option>\n<option value="9">\u0421\u0435\u043d\u0442\u044f\u0431\u0440\u044c</option>\n<option value="10">\u041e\u043a\u0442\u044f\u0431\u0440\u044c</option>\n<option value="11">\u041d\u043e\u044f\u0431\u0440\u044c</option>\n<option value="12" selected="selected">\u0414\u0435\u043a\u0430\u0431\u0440\u044c</option>\n</select>\n<select name="mydate_year" id="id_mydate_year">\n<option value="2009" selected="selected">2009</option>\n<option value="2010">2010</option>\n<option value="2011">2011</option>\n<option value="2012">2012</option>\n<option value="2013">2013</option>\n<option value="2014">2014</option>\n<option value="2015">2015</option>\n<option value="2016">2016</option>\n<option value="2017">2017</option>\n<option value="2018">2018</option>\n</select>',
-                    SelectDateWidget(years=range(2009, 2019)).render('mydate', datetime.date(2009, 12, 31))
+                '<select name="mydate_day" id="id_mydate_day">\n<option value="1">1</option>\n<option value="2">2</option>\n<option value="3">3</option>\n<option value="4">4</option>\n<option value="5">5</option>\n<option value="6">6</option>\n<option value="7">7</option>\n<option value="8">8</option>\n<option value="9">9</option>\n<option value="10">10</option>\n<option value="11">11</option>\n<option value="12">12</option>\n<option value="13">13</option>\n<option value="14">14</option>\n<option value="15">15</option>\n<option value="16">16</option>\n<option value="17">17</option>\n<option value="18">18</option>\n<option value="19">19</option>\n<option value="20">20</option>\n<option value="21">21</option>\n<option value="22">22</option>\n<option value="23">23</option>\n<option value="24">24</option>\n<option value="25">25</option>\n<option value="26">26</option>\n<option value="27">27</option>\n<option value="28">28</option>\n<option value="29">29</option>\n<option value="30">30</option>\n<option value="31" selected="selected">31</option>\n</select>\n<select name="mydate_month" id="id_mydate_month">\n<option value="1">\u042f\u043d\u0432\u0430\u0440\u044c</option>\n<option value="2">\u0424\u0435\u0432\u0440\u0430\u043b\u044c</option>\n<option value="3">\u041c\u0430\u0440\u0442</option>\n<option value="4">\u0410\u043f\u0440\u0435\u043b\u044c</option>\n<option value="5">\u041c\u0430\u0439</option>\n<option value="6">\u0418\u044e\u043d\u044c</option>\n<option value="7">\u0418\u044e\u043b\u044c</option>\n<option value="8">\u0410\u0432\u0433\u0443\u0441\u0442</option>\n<option value="9">\u0421\u0435\u043d\u0442\u044f\u0431\u0440\u044c</option>\n<option value="10">\u041e\u043a\u0442\u044f\u0431\u0440\u044c</option>\n<option value="11">\u041d\u043e\u044f\u0431\u0440\u044c</option>\n<option value="12" selected="selected">\u0414\u0435\u043a\u0430\u0431\u0440\u044c</option>\n</select>\n<select name="mydate_year" id="id_mydate_year">\n<option value="2009" selected="selected">2009</option>\n<option value="2010">2010</option>\n<option value="2011">2011</option>\n<option value="2012">2012</option>\n<option value="2013">2013</option>\n<option value="2014">2014</option>\n<option value="2015">2015</option>\n<option value="2016">2016</option>\n<option value="2017">2017</option>\n<option value="2018">2018</option>\n</select>',
+                SelectDateWidget(years=range(2009, 2019)).render('mydate', datetime.date(2009, 12, 31))
             )
 
         # English locale
@@ -728,9 +715,8 @@ class FormattingTests(TransRealMixin, TestCase):
         with translation.override('de-at', deactivate=True):
             de_format_mod = import_module('django.conf.locale.de.formats')
             self.assertEqual(list(iter_format_modules('de')), [de_format_mod])
-            with self.settings(FORMAT_MODULE_PATH='i18n.other.locale'):
-                test_de_format_mod = import_module('i18n.other.locale.de.formats')
-                self.assertEqual(list(iter_format_modules('de')), [test_de_format_mod, de_format_mod])
+            test_de_format_mod = import_module('i18n.other.locale.de.formats')
+            self.assertEqual(list(iter_format_modules('de', 'i18n.other.locale')), [test_de_format_mod, de_format_mod])
 
     def test_iter_format_modules_stability(self):
         """
@@ -756,7 +742,7 @@ class FormattingTests(TransRealMixin, TestCase):
         """
         Tests the {% localize %} templatetag
         """
-        context = Context({'value': 3.14 })
+        context = Context({'value': 3.14})
         template1 = Template("{% load l10n %}{% localize %}{{ value }}{% endlocalize %};{% localize on %}{{ value }}{% endlocalize %}")
         template2 = Template("{% load l10n %}{{ value }};{% localize off %}{{ value }};{% endlocalize %}{{ value }}")
         template3 = Template('{% load l10n %}{{ value }};{{ value|unlocalize }}')
@@ -773,6 +759,39 @@ class FormattingTests(TransRealMixin, TestCase):
                 self.assertEqual(template1.render(context), output1)
                 self.assertEqual(template2.render(context), output2)
                 self.assertEqual(template3.render(context), output3)
+
+    def test_localized_as_text_as_hidden_input(self):
+        """
+        Tests if form input with 'as_hidden' or 'as_text' is correctly localized. Ticket #18777
+        """
+        self.maxDiff = 1200
+
+        with translation.override('de-at', deactivate=True):
+            template = Template('{% load l10n %}{{ form.date_added }}; {{ form.cents_paid }}')
+            template_as_text = Template('{% load l10n %}{{ form.date_added.as_text }}; {{ form.cents_paid.as_text }}')
+            template_as_hidden = Template('{% load l10n %}{{ form.date_added.as_hidden }}; {{ form.cents_paid.as_hidden }}')
+            form = CompanyForm({
+                'name': 'acme',
+                'date_added': datetime.datetime(2009, 12, 31, 6, 0, 0),
+                'cents_paid': decimal.Decimal('59.47'),
+                'products_delivered': 12000,
+            })
+            context = Context({'form': form})
+            self.assertTrue(form.is_valid())
+
+            self.assertHTMLEqual(
+                template.render(context),
+                '<input id="id_date_added" name="date_added" type="text" value="31.12.2009 06:00:00" />; <input id="id_cents_paid" name="cents_paid" type="text" value="59,47" />'
+            )
+            self.assertHTMLEqual(
+                template_as_text.render(context),
+                '<input id="id_date_added" name="date_added" type="text" value="31.12.2009 06:00:00" />; <input id="id_cents_paid" name="cents_paid" type="text" value="59,47" />'
+            )
+            self.assertHTMLEqual(
+                template_as_hidden.render(context),
+                '<input id="id_date_added" name="date_added" type="hidden" value="31.12.2009 06:00:00" />; <input id="id_cents_paid" name="cents_paid" type="hidden" value="59,47" />'
+            )
+
 
 class MiscTests(TransRealMixin, TestCase):
 
@@ -817,6 +836,7 @@ class MiscTests(TransRealMixin, TestCase):
         self.assertEqual([], p('de;q=0.a'))
         self.assertEqual([], p('12-345'))
         self.assertEqual([], p(''))
+        self.assertEqual([], p('en; q=1,'))
 
     def test_parse_literal_http_header(self):
         """
@@ -936,16 +956,8 @@ class ResolutionOrderI18NTests(TransRealMixin, TestCase):
         self.assertTrue(msgstr in result, ("The string '%s' isn't in the "
             "translation of '%s'; the actual result is '%s'." % (msgstr, msgid, result)))
 
+@override_settings(INSTALLED_APPS=['i18n.resolution'] + list(settings.INSTALLED_APPS))
 class AppResolutionOrderI18NTests(ResolutionOrderI18NTests):
-
-    def setUp(self):
-        self.old_installed_apps = settings.INSTALLED_APPS
-        settings.INSTALLED_APPS = ['i18n.resolution'] + list(settings.INSTALLED_APPS)
-        super(AppResolutionOrderI18NTests, self).setUp()
-
-    def tearDown(self):
-        settings.INSTALLED_APPS = self.old_installed_apps
-        super(AppResolutionOrderI18NTests, self).tearDown()
 
     def test_app_translation(self):
         self.assertUgettext('Date/time', 'APP')
@@ -1029,9 +1041,8 @@ class MultipleLocaleActivationTests(TransRealMixin, TestCase):
     def test_multiple_locale_filter(self):
         with translation.override('de'):
             t = Template("{% load i18n %}{{ 0|yesno:_('yes,no,maybe') }}")
-        with translation.override(self._old_language):
-            with translation.override('nl'):
-                self.assertEqual(t.render(Context({})), 'nee')
+        with translation.override(self._old_language), translation.override('nl'):
+            self.assertEqual(t.render(Context({})), 'nee')
 
     def test_multiple_locale_filter_deactivate(self):
         with translation.override('de', deactivate=True):
@@ -1050,9 +1061,8 @@ class MultipleLocaleActivationTests(TransRealMixin, TestCase):
     def test_multiple_locale(self):
         with translation.override('de'):
             t = Template("{{ _('No') }}")
-        with translation.override(self._old_language):
-            with translation.override('nl'):
-                self.assertEqual(t.render(Context({})), 'Nee')
+        with translation.override(self._old_language), translation.override('nl'):
+            self.assertEqual(t.render(Context({})), 'Nee')
 
     def test_multiple_locale_deactivate(self):
         with translation.override('de', deactivate=True):
@@ -1071,9 +1081,8 @@ class MultipleLocaleActivationTests(TransRealMixin, TestCase):
     def test_multiple_locale_loadi18n(self):
         with translation.override('de'):
             t = Template("{% load i18n %}{{ _('No') }}")
-        with translation.override(self._old_language):
-            with translation.override('nl'):
-                self.assertEqual(t.render(Context({})), 'Nee')
+        with translation.override(self._old_language), translation.override('nl'):
+            self.assertEqual(t.render(Context({})), 'Nee')
 
     def test_multiple_locale_loadi18n_deactivate(self):
         with translation.override('de', deactivate=True):
@@ -1092,9 +1101,8 @@ class MultipleLocaleActivationTests(TransRealMixin, TestCase):
     def test_multiple_locale_trans(self):
         with translation.override('de'):
             t = Template("{% load i18n %}{% trans 'No' %}")
-        with translation.override(self._old_language):
-            with translation.override('nl'):
-                self.assertEqual(t.render(Context({})), 'Nee')
+        with translation.override(self._old_language), translation.override('nl'):
+            self.assertEqual(t.render(Context({})), 'Nee')
 
     def test_multiple_locale_deactivate_trans(self):
         with translation.override('de', deactivate=True):
@@ -1113,9 +1121,8 @@ class MultipleLocaleActivationTests(TransRealMixin, TestCase):
     def test_multiple_locale_btrans(self):
         with translation.override('de'):
             t = Template("{% load i18n %}{% blocktrans %}No{% endblocktrans %}")
-        with translation.override(self._old_language):
-            with translation.override('nl'):
-                self.assertEqual(t.render(Context({})), 'Nee')
+        with translation.override(self._old_language), translation.override('nl'):
+            self.assertEqual(t.render(Context({})), 'Nee')
 
     def test_multiple_locale_deactivate_btrans(self):
         with translation.override('de', deactivate=True):
@@ -1151,6 +1158,60 @@ class LocaleMiddlewareTests(TransRealMixin, TestCase):
         self.assertContains(response, "Oui/Non")
         response = self.client.get('/en/streaming/')
         self.assertContains(response, "Yes/No")
+
+    @override_settings(
+        MIDDLEWARE_CLASSES=(
+            'django.contrib.sessions.middleware.SessionMiddleware',
+            'django.middleware.locale.LocaleMiddleware',
+            'django.middleware.common.CommonMiddleware',
+        ),
+    )
+    def test_session_language(self):
+        """
+        Check that language is stored in session if missing.
+        """
+        # Create an empty session
+        engine = import_module(settings.SESSION_ENGINE)
+        session = engine.SessionStore()
+        session.save()
+        self.client.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
+
+        # Clear the session data before request
+        session.save()
+        self.client.get('/en/simple/')
+        self.assertEqual(self.client.session['_language'], 'en')
+
+        # Clear the session data before request
+        session.save()
+        self.client.get('/fr/simple/')
+        self.assertEqual(self.client.session['_language'], 'fr')
+
+        # Check that language is not changed in session
+        self.client.get('/en/simple/')
+        self.assertEqual(self.client.session['_language'], 'fr')
+
+    @override_settings(
+        MIDDLEWARE_CLASSES=(
+            'django.contrib.sessions.middleware.SessionMiddleware',
+            'django.middleware.locale.LocaleMiddleware',
+            'django.middleware.common.CommonMiddleware',
+        ),
+    )
+    def test_backwards_session_language(self):
+        """
+        Check that language is stored in session if missing.
+        """
+        # Create session with old language key name
+        engine = import_module(settings.SESSION_ENGINE)
+        session = engine.SessionStore()
+        session['django_language'] = 'en'
+        session.save()
+        self.client.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
+
+        # request other language; should default to old language key value
+        self.client.get('/fr/simple/')
+        self.assertEqual(self.client.session['_language'], 'en')
+
 
 @override_settings(
     USE_I18N=True,

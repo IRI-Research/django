@@ -18,15 +18,15 @@ class Place(models.Model):
 
 @python_2_unicode_compatible
 class Restaurant(Place):
-    serves_hot_dogs = models.BooleanField()
-    serves_pizza = models.BooleanField()
+    serves_hot_dogs = models.BooleanField(default=False)
+    serves_pizza = models.BooleanField(default=False)
 
     def __str__(self):
         return "%s the restaurant" % self.name
 
 @python_2_unicode_compatible
 class ItalianRestaurant(Restaurant):
-    serves_gnocchi = models.BooleanField()
+    serves_gnocchi = models.BooleanField(default=False)
 
     def __str__(self):
         return "%s the italian restaurant" % self.name
@@ -50,11 +50,24 @@ class ParkingLot3(Place):
     primary_key = models.AutoField(primary_key=True)
     parent = models.OneToOneField(Place, parent_link=True)
 
+class ParkingLot4(models.Model):
+    # Test parent_link connector can be discovered in abstract classes.
+    parent = models.OneToOneField(Place, parent_link=True)
+
+    class Meta:
+        abstract = True
+
+class ParkingLot4A(ParkingLot4, Place):
+    pass
+
+class ParkingLot4B(Place, ParkingLot4):
+    pass
+
 class Supplier(models.Model):
     restaurant = models.ForeignKey(Restaurant)
 
 class Wholesaler(Supplier):
-    retailer = models.ForeignKey(Supplier,related_name='wholesale_supplier')
+    retailer = models.ForeignKey(Supplier, related_name='wholesale_supplier')
 
 class Parent(models.Model):
     created = models.DateTimeField(default=datetime.datetime.now)
@@ -73,6 +86,7 @@ class SelfRefChild(SelfRefParent):
 class Article(models.Model):
     headline = models.CharField(max_length=100)
     pub_date = models.DateTimeField()
+
     class Meta:
         ordering = ('-pub_date', 'headline')
 
@@ -110,8 +124,8 @@ class DerivedM(BaseM):
     derived_name = models.CharField(max_length=100)
 
     def __str__(self):
-        return "PK = %d, base_name = %s, derived_name = %s" \
-                % (self.customPK, self.base_name, self.derived_name)
+        return "PK = %d, base_name = %s, derived_name = %s" % (
+            self.customPK, self.base_name, self.derived_name)
 
 class AuditBase(models.Model):
     planned_date = models.DateField()
@@ -171,7 +185,7 @@ class Station(SearchableLocation):
 
 class BusStation(Station):
     bus_routes = models.CommaSeparatedIntegerField(max_length=128)
-    inbound = models.BooleanField()
+    inbound = models.BooleanField(default=False)
 
 class TrainStation(Station):
     zone = models.IntegerField()

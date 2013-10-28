@@ -1,13 +1,19 @@
 import json
+import warnings
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseRedirect
-from django.core.exceptions import SuspiciousOperation
 from django.shortcuts import render_to_response
 from django.core.serializers.json import DjangoJSONEncoder
-from django.test.client import CONTENT_TYPE_RE
 from django.template import RequestContext
+from django.test import Client
+from django.test.client import CONTENT_TYPE_RE
+from django.test.utils import setup_test_environment
+
+
+class CustomTestException(Exception):
+    pass
 
 def no_template_view(request):
     "A simple view that expects a GET request, and returns a rendered template"
@@ -18,7 +24,7 @@ def staff_only_view(request):
     if request.user.is_staff:
         return HttpResponse('')
     else:
-        raise SuspiciousOperation()
+        raise CustomTestException()
 
 def get_view(request):
     "A simple login protected view"
@@ -27,13 +33,20 @@ get_view = login_required(get_view)
 
 def request_data(request, template='base.html', data='sausage'):
     "A simple view that returns the request data in the context"
+
+    # request.REQUEST is deprecated, but needs testing until removed.
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        request_foo = request.REQUEST.get('foo')
+        request_bar = request.REQUEST.get('bar')
+
     return render_to_response(template, {
-        'get-foo':request.GET.get('foo',None),
-        'get-bar':request.GET.get('bar',None),
-        'post-foo':request.POST.get('foo',None),
-        'post-bar':request.POST.get('bar',None),
-        'request-foo':request.REQUEST.get('foo',None),
-        'request-bar':request.REQUEST.get('bar',None),
+        'get-foo': request.GET.get('foo'),
+        'get-bar': request.GET.get('bar'),
+        'post-foo': request.POST.get('foo'),
+        'post-bar': request.POST.get('bar'),
+        'request-foo': request_foo,
+        'request-bar': request_bar,
         'data': data,
     })
 
@@ -48,6 +61,15 @@ def view_with_argument(request, name):
         return HttpResponse('Hi, Arthur')
     else:
         return HttpResponse('Howdy, %s' % name)
+
+def nested_view(request):
+    """
+    A view that uses test client to call another view.
+    """
+    setup_test_environment()
+    c = Client()
+    c.get("/test_client_regress/no_template_view")
+    return render_to_response('base.html', {'nested': 'yes'})
 
 def login_protected_redirect_view(request):
     "A view that redirects all requests to the GET view"

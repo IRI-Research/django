@@ -14,7 +14,7 @@ from django.db.models.fields.related import ForeignObject, ForeignObjectRel
 from django.db.models.related import PathInfo
 from django.db.models.sql.where import Constraint
 from django.forms import ModelForm, ALL_FIELDS
-from django.forms.models import (BaseModelFormSet, modelformset_factory, save_instance,
+from django.forms.models import (BaseModelFormSet, modelformset_factory,
     modelform_defines_fields)
 from django.contrib.admin.options import InlineModelAdmin, flatten_fieldsets
 from django.contrib.contenttypes.models import ContentType
@@ -25,7 +25,7 @@ from django.utils.encoding import smart_text
 
 class RenameGenericForeignKeyMethods(RenameMethodsBase):
     renamed_methods = (
-        ('get_prefetch_query_set', 'get_prefetch_queryset', PendingDeprecationWarning),
+        ('get_prefetch_query_set', 'get_prefetch_queryset', DeprecationWarning),
     )
 
 
@@ -46,10 +46,10 @@ class GenericForeignKey(six.with_metaclass(RenameGenericForeignKeyMethods)):
         self.cache_attr = "_%s_cache" % name
         cls._meta.add_virtual_field(self)
 
-        # For some reason I don't totally understand, using weakrefs here doesn't work.
-        signals.pre_init.connect(self.instance_pre_init, sender=cls, weak=False)
+        # Only run pre-initialization field assignment on non-abstract models
+        if not cls._meta.abstract:
+            signals.pre_init.connect(self.instance_pre_init, sender=cls)
 
-        # Connect myself as the descriptor for this field
         setattr(cls, name, self)
 
     def instance_pre_init(self, signal, sender, args, kwargs, **_kwargs):
@@ -59,14 +59,18 @@ class GenericForeignKey(six.with_metaclass(RenameGenericForeignKeyMethods)):
         """
         if self.name in kwargs:
             value = kwargs.pop(self.name)
-            kwargs[self.ct_field] = self.get_content_type(obj=value)
-            kwargs[self.fk_field] = value._get_pk_val()
+            if value is not None:
+                kwargs[self.ct_field] = self.get_content_type(obj=value)
+                kwargs[self.fk_field] = value._get_pk_val()
+            else:
+                kwargs[self.ct_field] = None
+                kwargs[self.fk_field] = None
 
     def get_content_type(self, obj=None, id=None, using=None):
         if obj is not None:
             return ContentType.objects.db_manager(obj._state.db).get_for_model(
                 obj, for_concrete_model=self.for_concrete_model)
-        elif id:
+        elif id is not None:
             return ContentType.objects.db_manager(using).get_for_id(id)
         else:
             # This should never happen. I love comments like this, don't you?
@@ -130,7 +134,7 @@ class GenericForeignKey(six.with_metaclass(RenameGenericForeignKeyMethods)):
             # performance when dealing with GFKs in loops and such.
             f = self.model._meta.get_field(self.ct_field)
             ct_id = getattr(instance, f.get_attname(), None)
-            if ct_id:
+            if ct_id is not None:
                 ct = self.get_content_type(id=ct_id, using=instance._state.db)
                 try:
                     rel_obj = ct.get_object_for_this_type(pk=getattr(instance, self.fk_field))
@@ -236,12 +240,10 @@ class GenericRelation(ForeignObject):
 
         """
         return self.rel.to._base_manager.db_manager(using).filter(**{
-                "%s__pk" % self.content_type_field_name:
-                    ContentType.objects.db_manager(using).get_for_model(
-                        self.model, for_concrete_model=self.for_concrete_model).pk,
-                "%s__in" % self.object_id_field_name:
-                    [obj.pk for obj in objs]
-                })
+            "%s__pk" % self.content_type_field_name: ContentType.objects.db_manager(using).get_for_model(
+                self.model, for_concrete_model=self.for_concrete_model).pk,
+            "%s__in" % self.object_id_field_name: [obj.pk for obj in objs]
+        })
 
 
 class ReverseGenericRelatedObjectsDescriptor(object):
@@ -319,6 +321,24 @@ def create_generic_related_manager(superclass):
                 '%s__exact' % object_id_field_name: instance._get_pk_val(),
             }
 
+        def __call__(self, **kwargs):
+            # We use **kwargs rather than a kwarg argument to enforce the
+            # `manager='manager_name'` syntax.
+            manager = getattr(self.model, kwargs.pop('manager'))
+            manager_class = create_generic_related_manager(manager.__class__)
+            return manager_class(
+                model = self.model,
+                instance = self.instance,
+                symmetrical = self.symmetrical,
+                source_col_name = self.source_col_name,
+                target_col_name = self.target_col_name,
+                content_type = self.content_type,
+                content_type_field_name = self.content_type_field_name,
+                object_id_field_name = self.object_id_field_name,
+                prefetch_cache_name = self.prefetch_cache_name,
+            )
+        do_not_call_in_templates = True
+
         def get_queryset(self):
             try:
                 return self.instance._prefetched_objects_cache[self.prefetch_cache_name]
@@ -330,9 +350,8 @@ def create_generic_related_manager(superclass):
             db = self._db or router.db_for_read(self.model, instance=instances[0])
             query = {
                 '%s__pk' % self.content_type_field_name: self.content_type.id,
-                '%s__in' % self.object_id_field_name:
-                    set(obj._get_pk_val() for obj in instances)
-                }
+                '%s__in' % self.object_id_field_name: set(obj._get_pk_val() for obj in instances)
+            }
             qs = super(GenericRelatedObjectManager, self).get_queryset().using(db).filter(**query)
             # We (possibly) need to convert object IDs to the type of the
             # instances' PK in order to match up instances:
@@ -354,14 +373,12 @@ def create_generic_related_manager(superclass):
 
         def remove(self, *objs):
             db = router.db_for_write(self.model, instance=self.instance)
-            for obj in objs:
-                obj.delete(using=db)
+            self.using(db).filter(pk__in=[o.pk for o in objs]).delete()
         remove.alters_data = True
 
         def clear(self):
             db = router.db_for_write(self.model, instance=self.instance)
-            for obj in self.all():
-                obj.delete(using=db)
+            self.using(db).delete()
         clear.alters_data = True
 
         def create(self, **kwargs):
@@ -384,7 +401,7 @@ class BaseGenericInlineFormSet(BaseModelFormSet):
     """
 
     def __init__(self, data=None, files=None, instance=None, save_as_new=None,
-                 prefix=None, queryset=None):
+                 prefix=None, queryset=None, **kwargs):
         opts = self.model._meta
         self.instance = instance
         self.rel_name = '-'.join((
@@ -403,7 +420,8 @@ class BaseGenericInlineFormSet(BaseModelFormSet):
             })
         super(BaseGenericInlineFormSet, self).__init__(
             queryset=qs, data=data, files=files,
-            prefix=prefix
+            prefix=prefix,
+            **kwargs
         )
 
     @classmethod
@@ -414,13 +432,12 @@ class BaseGenericInlineFormSet(BaseModelFormSet):
         ))
 
     def save_new(self, form, commit=True):
-        kwargs = {
-            self.ct_field.get_attname(): ContentType.objects.get_for_model(
-                self.instance, for_concrete_model=self.for_concrete_model).pk,
-            self.ct_fk_field.get_attname(): self.instance.pk,
-        }
-        new_obj = self.model(**kwargs)
-        return save_instance(form, new_obj, commit=commit)
+        setattr(form.instance, self.ct_field.get_attname(),
+            ContentType.objects.get_for_model(self.instance).pk)
+        setattr(form.instance, self.ct_fk_field.get_attname(),
+            self.instance.pk)
+        return form.save(commit=commit)
+
 
 def generic_inlineformset_factory(model, form=ModelForm,
                                   formset=BaseGenericInlineFormSet,
@@ -433,8 +450,8 @@ def generic_inlineformset_factory(model, form=ModelForm,
     """
     Returns a ``GenericInlineFormSet`` for the given kwargs.
 
-    You must provide ``ct_field`` and ``object_id`` if they different from the
-    defaults ``content_type`` and ``object_id`` respectively.
+    You must provide ``ct_field`` and ``fk_field`` if they are different from
+    the defaults ``content_type`` and ``object_id`` respectively.
     """
     opts = model._meta
     # if there is no field called `ct_field` let the exception propagate
@@ -464,10 +481,10 @@ class GenericInlineModelAdmin(InlineModelAdmin):
     formset = BaseGenericInlineFormSet
 
     def get_formset(self, request, obj=None, **kwargs):
-        if self.declared_fieldsets:
-            fields = flatten_fieldsets(self.declared_fieldsets)
+        if 'fields' in kwargs:
+            fields = kwargs.pop('fields')
         else:
-            fields = None
+            fields = flatten_fieldsets(self.get_fieldsets(request, obj))
         if self.exclude is None:
             exclude = []
         else:

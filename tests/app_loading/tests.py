@@ -1,14 +1,16 @@
-from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import copy
 import os
 import sys
 import time
+from unittest import TestCase
 
 from django.conf import Settings
-from django.db.models.loading import cache, load_app, get_model, get_models
+from django.db.models.loading import cache, load_app, get_model, get_models, AppCache
+from django.test.utils import override_settings
 from django.utils._os import upath
-from django.utils.unittest import TestCase
+
 
 class EggLoadingTest(TestCase):
 
@@ -60,12 +62,33 @@ class EggLoadingTest(TestCase):
         egg_name = '%s/brokenapp.egg' % self.egg_dir
         sys.path.append(egg_name)
         self.assertRaises(ImportError, load_app, 'broken_app')
+        raised = None
         try:
             load_app('broken_app')
         except ImportError as e:
-            # Make sure the message is indicating the actual
-            # problem in the broken app.
-            self.assertTrue("modelz" in e.args[0])
+            raised = e
+
+        # Make sure the message is indicating the actual
+        # problem in the broken app.
+        self.assertTrue(raised is not None)
+        self.assertTrue("modelz" in raised.args[0])
+
+    def test_missing_app(self):
+        """
+        Test that repeated app loading doesn't succeed in case there is an
+        error. Refs #17667.
+        """
+        # AppCache is a Borg, so we can instantiate one and change its
+        # loaded to False to force the following code to actually try to
+        # populate the cache.
+        a = AppCache()
+        a.loaded = False
+        try:
+            with override_settings(INSTALLED_APPS=('notexists',)):
+                self.assertRaises(ImportError, get_model, 'notexists', 'nomodel', seed_cache=True)
+                self.assertRaises(ImportError, get_model, 'notexists', 'nomodel', seed_cache=True)
+        finally:
+            a.loaded = True
 
 
 class GetModelsTest(TestCase):
@@ -73,11 +96,9 @@ class GetModelsTest(TestCase):
         from .not_installed import models
         self.not_installed_module = models
 
-
     def test_get_model_only_returns_installed_models(self):
         self.assertEqual(
             get_model("not_installed", "NotInstalledModel"), None)
-
 
     def test_get_model_with_not_installed(self):
         self.assertEqual(
@@ -85,16 +106,13 @@ class GetModelsTest(TestCase):
                 "not_installed", "NotInstalledModel", only_installed=False),
             self.not_installed_module.NotInstalledModel)
 
-
     def test_get_models_only_returns_installed_models(self):
         self.assertFalse(
             "NotInstalledModel" in
             [m.__name__ for m in get_models()])
 
-
     def test_get_models_with_app_label_only_returns_installed_models(self):
         self.assertEqual(get_models(self.not_installed_module), [])
-
 
     def test_get_models_with_not_installed(self):
         self.assertTrue(

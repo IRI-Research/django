@@ -17,8 +17,12 @@ class ProxyCategory(DumbCategory):
     class Meta:
         proxy = True
 
+@python_2_unicode_compatible
 class NamedCategory(DumbCategory):
     name = models.CharField(max_length=10)
+
+    def __str__(self):
+        return self.name
 
 @python_2_unicode_compatible
 class Tag(models.Model):
@@ -262,8 +266,12 @@ class ReservedName(models.Model):
         return self.name
 
 # A simpler shared-foreign-key setup that can expose some problems.
+@python_2_unicode_compatible
 class SharedConnection(models.Model):
     data = models.CharField(max_length=10)
+
+    def __str__(self):
+        return self.data
 
 class PointerA(models.Model):
     connection = models.ForeignKey(SharedConnection)
@@ -351,7 +359,7 @@ class ObjectC(models.Model):
     objectb = models.ForeignKey(ObjectB)
 
     def __str__(self):
-       return self.name
+        return self.name
 
 @python_2_unicode_compatible
 class SimpleCategory(models.Model):
@@ -381,6 +389,10 @@ class OneToOneCategory(models.Model):
 
     def __str__(self):
         return "one2one " + self.new_name
+
+class CategoryRelationship(models.Model):
+    first = models.ForeignKey(SimpleCategory, related_name='first_rel')
+    second = models.ForeignKey(SimpleCategory, related_name='second_rel')
 
 class NullableName(models.Model):
     name = models.CharField(max_length=20, null=True)
@@ -497,3 +509,38 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return '%s' % self.pk
+
+class BaseUser(models.Model):
+    pass
+
+@python_2_unicode_compatible
+class Task(models.Model):
+    title = models.CharField(max_length=10)
+    owner = models.ForeignKey(BaseUser, related_name='owner')
+    creator = models.ForeignKey(BaseUser, related_name='creator')
+
+    def __str__(self):
+        return self.title
+
+@python_2_unicode_compatible
+class Staff(models.Model):
+    name = models.CharField(max_length=10)
+
+    def __str__(self):
+        return self.name
+
+@python_2_unicode_compatible
+class StaffUser(BaseUser):
+    staff = models.OneToOneField(Staff, related_name='user')
+
+    def __str__(self):
+        return self.staff
+
+class Ticket21203Parent(models.Model):
+    parentid = models.AutoField(primary_key=True)
+    parent_bool = models.BooleanField(default=True)
+    created = models.DateTimeField(auto_now=True)
+
+class Ticket21203Child(models.Model):
+    childid = models.AutoField(primary_key=True)
+    parent = models.ForeignKey(Ticket21203Parent)

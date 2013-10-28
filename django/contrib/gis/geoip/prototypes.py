@@ -14,7 +14,7 @@ class GeoIPRecord(Structure):
                 ('longitude', c_float),
                 # TODO: In 1.4.6 this changed from `int dma_code;` to
                 # `union {int metro_code; int dma_code;};`.  Change
-                # to a `ctypes.Union` in to accomodate in future when
+                # to a `ctypes.Union` in to accommodate in future when
                 # pre-1.4.6 versions are no longer distributed.
                 ('dma_code', c_int),
                 ('area_code', c_int),
@@ -22,11 +22,13 @@ class GeoIPRecord(Structure):
                 ('continent_code', c_char_p),
                 ]
 geoip_char_fields = [name for name, ctype in GeoIPRecord._fields_ if ctype is c_char_p]
-geoip_encodings = { 0: 'iso-8859-1',
-                    1: 'utf8',
-                    }
+geoip_encodings = {
+    0: 'iso-8859-1',
+    1: 'utf8',
+}
 
-class GeoIPTag(Structure): pass
+class GeoIPTag(Structure):
+    pass
 
 RECTYPE = POINTER(GeoIPRecord)
 DBTYPE = POINTER(GeoIPTag)
@@ -48,7 +50,7 @@ GeoIPRecord_delete.restype = None
 
 # For retrieving records by name or address.
 def check_record(result, func, cargs):
-    if bool(result):
+    if result:
         # Checking the pointer to the C structure, if valid pull out elements
         # into a dicionary.
         rec = result.contents

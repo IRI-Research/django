@@ -51,9 +51,6 @@ class FileBasedCache(BaseCache):
         fname = self._key_to_file(key)
         dirname = os.path.dirname(fname)
 
-        if timeout == DEFAULT_TIMEOUT:
-            timeout = self.default_timeout
-
         self._cull()
 
         try:
@@ -61,7 +58,7 @@ class FileBasedCache(BaseCache):
                 os.makedirs(dirname)
 
             with open(fname, 'wb') as f:
-                expiry = None if timeout is None else time.time() + timeout
+                expiry = self.get_backend_timeout(timeout)
                 pickle.dump(expiry, f, pickle.HIGHEST_PROTOCOL)
                 pickle.dump(value, f, pickle.HIGHEST_PROTOCOL)
         except (IOError, OSError):
@@ -144,7 +141,7 @@ class FileBasedCache(BaseCache):
 
     def _get_num_entries(self):
         count = 0
-        for _,_,files in os.walk(self._dir):
+        for _, _, files in os.walk(self._dir):
             count += len(files)
         return count
     _num_entries = property(_get_num_entries)

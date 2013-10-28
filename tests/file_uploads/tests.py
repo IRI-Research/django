@@ -1,5 +1,5 @@
 #! -*- coding: utf-8 -*-
-from __future__ import absolute_import, unicode_literals
+from __future__ import unicode_literals
 
 import base64
 import errno
@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import tempfile as sys_tempfile
+import unittest
 
 from django.core.files import temp as tempfile
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -16,7 +17,6 @@ from django.test import TestCase, client
 from django.test.utils import override_settings
 from django.utils.encoding import force_bytes
 from django.utils.six import StringIO
-from django.utils import unittest
 
 from . import uploadhandler
 from .models import FileModel
@@ -61,7 +61,7 @@ class FileUploadTests(TestCase):
             'name': 'Ringo',
             'file_field1': file1,
             'file_field2': file2,
-            }
+        }
 
         for key in list(post_data):
             try:
@@ -80,7 +80,7 @@ class FileUploadTests(TestCase):
             'Content-Disposition: form-data; name="file"; filename="test.txt"',
             'Content-Type: application/octet-stream',
             'Content-Transfer-Encoding: base64',
-            '',]))
+            '']))
         payload.write(b"\r\n" + base64.b64encode(force_bytes(content)) + b"\r\n")
         payload.write('--' + client.BOUNDARY + '--\r\n')
         r = {
@@ -112,7 +112,7 @@ class FileUploadTests(TestCase):
 
             post_data = {
                 'file_unicode': file1,
-                }
+            }
 
             response = self.client.post('/file_uploads/unicode_name/', post_data)
 
@@ -167,16 +167,26 @@ class FileUploadTests(TestCase):
 
     def test_filename_overflow(self):
         """File names over 256 characters (dangerous on some platforms) get fixed up."""
-        name = "%s.txt" % ("f"*500)
-        payload = client.FakePayload("\r\n".join([
-            '--' + client.BOUNDARY,
-            'Content-Disposition: form-data; name="file"; filename="%s"' % name,
-            'Content-Type: application/octet-stream',
-            '',
-            'Oops.'
-            '--' + client.BOUNDARY + '--',
-            '',
-        ]))
+        long_str = 'f' * 300
+        cases = [
+            # field name, filename, expected
+            ('long_filename', '%s.txt' % long_str, '%s.txt' % long_str[:251]),
+            ('long_extension', 'foo.%s' % long_str, '.%s' % long_str[:254]),
+            ('no_extension', long_str, long_str[:255]),
+            ('no_filename', '.%s' % long_str, '.%s' % long_str[:254]),
+            ('long_everything', '%s.%s' % (long_str, long_str), '.%s' % long_str[:254]),
+        ]
+        payload = client.FakePayload()
+        for name, filename, _ in cases:
+            payload.write("\r\n".join([
+                '--' + client.BOUNDARY,
+                'Content-Disposition: form-data; name="{0}"; filename="{1}"',
+                'Content-Type: application/octet-stream',
+                '',
+                'Oops.',
+                ''
+            ]).format(name, filename))
+        payload.write('\r\n--' + client.BOUNDARY + '--\r\n')
         r = {
             'CONTENT_LENGTH': len(payload),
             'CONTENT_TYPE':   client.MULTIPART_CONTENT,
@@ -184,8 +194,33 @@ class FileUploadTests(TestCase):
             'REQUEST_METHOD': 'POST',
             'wsgi.input':     payload,
         }
-        got = json.loads(self.client.request(**r).content.decode('utf-8'))
-        self.assertTrue(len(got['file']) < 256, "Got a long file name (%s characters)." % len(got['file']))
+        result = json.loads(self.client.request(**r).content.decode('utf-8'))
+        for name, _, expected in cases:
+            got = result[name]
+            self.assertEqual(expected, got, 'Mismatch for {0}'.format(name))
+            self.assertTrue(len(got) < 256,
+                            "Got a long file name (%s characters)." % len(got))
+
+    def test_content_type_extra(self):
+        """Uploaded files may have content type parameters available."""
+        tdir = tempfile.gettempdir()
+
+        no_content_type = tempfile.NamedTemporaryFile(suffix=".ctype_extra", dir=tdir)
+        no_content_type.write(b'something')
+        no_content_type.seek(0)
+
+        simple_file = tempfile.NamedTemporaryFile(suffix=".ctype_extra", dir=tdir)
+        simple_file.write(b'something')
+        simple_file.seek(0)
+        simple_file.content_type = 'text/plain; test-key=test_value'
+
+        response = self.client.post('/file_uploads/echo_content_type_extra/', {
+            'no_content_type': no_content_type,
+            'simple_file': simple_file,
+        })
+        received = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(received['no_content_type'], {})
+        self.assertEqual(received['simple_file'], {'test-key': 'test_value'})
 
     def test_truncated_multipart_handled_gracefully(self):
         """
@@ -300,7 +335,7 @@ class FileUploadTests(TestCase):
             """A handler that'll access POST during an exception."""
             def handle_uncaught_exception(self, request, resolver, exc_info):
                 ret = super(POSTAccessingHandler, self).handle_uncaught_exception(request, resolver, exc_info)
-                p = request.POST
+                request.POST  # evaluate
                 return ret
 
         # Maybe this is a little more complicated that it needs to be; but if
@@ -321,7 +356,7 @@ class FileUploadTests(TestCase):
                 'file_field': fp,
             }
             try:
-                response = self.client.post('/file_uploads/upload_errors/', post_data)
+                self.client.post('/file_uploads/upload_errors/', post_data)
             except reference_error.__class__ as err:
                 self.assertFalse(
                     str(err) == str(reference_error),
@@ -342,8 +377,7 @@ class FileUploadTests(TestCase):
         vars = {'boundary': 'oUrBoUnDaRyStRiNg'}
         post_data = [
             '--%(boundary)s',
-            'Content-Disposition: form-data; name="file_field"; '
-                'filename="MiXeD_cAsE.txt"',
+            'Content-Disposition: form-data; name="file_field"; filename="MiXeD_cAsE.txt"',
             'Content-Type: application/octet-stream',
             '',
             'file contents\n'
@@ -409,7 +443,7 @@ class MultiParserTests(unittest.TestCase):
     def test_empty_upload_handlers(self):
         # We're not actually parsing here; just checking if the parser properly
         # instantiates with empty upload handlers.
-        parser = MultiPartParser({
+        MultiPartParser({
             'CONTENT_TYPE':     'multipart/form-data; boundary=_foo',
             'CONTENT_LENGTH':   '1'
         }, StringIO('x'), [], 'utf-8')

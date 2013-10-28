@@ -19,6 +19,7 @@ class ModelToValidate(models.Model):
     email = models.EmailField(blank=True)
     url = models.URLField(blank=True)
     f_with_custom_validator = models.IntegerField(blank=True, null=True, validators=[validate_answer_to_universe])
+    slug = models.SlugField(blank=True)
 
     def clean(self):
         super(ModelToValidate, self).clean()
@@ -49,7 +50,7 @@ class UniqueForDateModel(models.Model):
     name = models.CharField(max_length=100)
 
 class CustomMessagesModel(models.Model):
-    other  = models.IntegerField(blank=True, null=True)
+    other = models.IntegerField(blank=True, null=True)
     number = models.IntegerField(db_column='number_val',
         error_messages={'null': 'NULL', 'not42': 'AAARGH', 'not_equal': '%s != me'},
         validators=[validate_answer_to_universe]
@@ -95,7 +96,7 @@ class GenericIPAddressTestModel(models.Model):
             blank=True, null=True)
 
 class GenericIPAddrUnpackUniqueTest(models.Model):
-    generic_v4unpack_ip = models.GenericIPAddressField(blank=True, unique=True, unpack_ipv4=True)
+    generic_v4unpack_ip = models.GenericIPAddressField(null=True, blank=True, unique=True, unpack_ipv4=True)
 
 
 # A model can't have multiple AutoFields

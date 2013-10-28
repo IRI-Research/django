@@ -1,5 +1,10 @@
+from contextlib import contextmanager
+import logging
 import re
 import sys
+from threading import local
+import time
+from unittest import skipUnless
 import warnings
 from functools import wraps
 from xml.dom.minidom import parseString, Node
@@ -8,6 +13,7 @@ from django.conf import settings, UserSettingsHolder
 from django.core import mail
 from django.core.signals import request_started
 from django.db import reset_queries
+from django.http import request
 from django.template import Template, loader, TemplateDoesNotExist
 from django.template.loaders import cached
 from django.test.signals import template_rendered, setting_changed
@@ -18,10 +24,11 @@ from django.utils.translation import deactivate
 
 __all__ = (
     'Approximate', 'ContextList',  'get_runner', 'override_settings',
-    'setup_test_environment', 'teardown_test_environment',
+    'requires_tz_support', 'setup_test_environment', 'teardown_test_environment',
 )
 
 RESTORE_LOADERS_ATTR = '_original_template_source_loaders'
+TZ_SUPPORT = hasattr(time, 'tzset')
 
 
 class Approximate(object):
@@ -58,6 +65,16 @@ class ContextList(list):
             return False
         return True
 
+    def keys(self):
+        """
+        Flattened keys of subcontexts.
+        """
+        keys = set()
+        for subcontext in self:
+            for dict in subcontext:
+                keys |= set(dict.keys())
+        return keys
+
 
 def instrumented_test_render(self, context):
     """
@@ -75,13 +92,16 @@ def setup_test_environment():
         - Set the email backend to the locmem email backend.
         - Setting the active locale to match the LANGUAGE_CODE setting.
     """
-    Template.original_render = Template._render
+    Template._original_render = Template._render
     Template._render = instrumented_test_render
 
-    mail.original_email_backend = settings.EMAIL_BACKEND
+    # Storing previous values in the settings module itself is problematic.
+    # Store them in arbitrary (but related) modules instead. See #20636.
+
+    mail._original_email_backend = settings.EMAIL_BACKEND
     settings.EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 
-    settings._original_allowed_hosts = settings.ALLOWED_HOSTS
+    request._original_allowed_hosts = settings.ALLOWED_HOSTS
     settings.ALLOWED_HOSTS = ['*']
 
     mail.outbox = []
@@ -96,41 +116,16 @@ def teardown_test_environment():
         - Restoring the email sending functions
 
     """
-    Template._render = Template.original_render
-    del Template.original_render
+    Template._render = Template._original_render
+    del Template._original_render
 
-    settings.EMAIL_BACKEND = mail.original_email_backend
-    del mail.original_email_backend
+    settings.EMAIL_BACKEND = mail._original_email_backend
+    del mail._original_email_backend
 
-    settings.ALLOWED_HOSTS = settings._original_allowed_hosts
-    del settings._original_allowed_hosts
+    settings.ALLOWED_HOSTS = request._original_allowed_hosts
+    del request._original_allowed_hosts
 
     del mail.outbox
-
-
-warn_txt = ("get_warnings_state/restore_warnings_state functions from "
-    "django.test.utils are deprecated. Use Python's warnings.catch_warnings() "
-    "context manager instead.")
-
-
-def get_warnings_state():
-    """
-    Returns an object containing the state of the warnings module
-    """
-    # There is no public interface for doing this, but this implementation of
-    # get_warnings_state and restore_warnings_state appears to work on Python
-    # 2.4 to 2.7.
-    warnings.warn(warn_txt, DeprecationWarning, stacklevel=2)
-    return warnings.filters[:]
-
-
-def restore_warnings_state(state):
-    """
-    Restores the state of the warnings module when passed an object that was
-    returned by get_warnings_state()
-    """
-    warnings.warn(warn_txt, DeprecationWarning, stacklevel=2)
-    warnings.filters = state[:]
 
 
 def get_runner(settings, test_runner_class=None):
@@ -195,7 +190,6 @@ class override_settings(object):
     """
     def __init__(self, **kwargs):
         self.options = kwargs
-        self.wrapped = settings._wrapped
 
     def __enter__(self):
         self.enable()
@@ -210,18 +204,11 @@ class override_settings(object):
                 raise Exception(
                     "Only subclasses of Django SimpleTestCase can be decorated "
                     "with override_settings")
-            original_pre_setup = test_func._pre_setup
-            original_post_teardown = test_func._post_teardown
-
-            def _pre_setup(innerself):
-                self.enable()
-                original_pre_setup(innerself)
-
-            def _post_teardown(innerself):
-                original_post_teardown(innerself)
-                self.disable()
-            test_func._pre_setup = _pre_setup
-            test_func._post_teardown = _post_teardown
+            if test_func._custom_settings:
+                test_func._custom_settings = dict(
+                    test_func._custom_settings, **self.options)
+            else:
+                test_func._custom_settings = self.options
             return test_func
         else:
             @wraps(test_func)
@@ -234,17 +221,19 @@ class override_settings(object):
         override = UserSettingsHolder(settings._wrapped)
         for key, new_value in self.options.items():
             setattr(override, key, new_value)
+        self.wrapped = settings._wrapped
         settings._wrapped = override
         for key, new_value in self.options.items():
             setting_changed.send(sender=settings._wrapped.__class__,
-                                 setting=key, value=new_value)
+                                 setting=key, value=new_value, enter=True)
 
     def disable(self):
         settings._wrapped = self.wrapped
+        del self.wrapped
         for key in self.options:
             new_value = getattr(settings, key, None)
             setting_changed.send(sender=settings._wrapped.__class__,
-                                 setting=key, value=new_value)
+                                 setting=key, value=new_value, enter=False)
 
 
 def compare_xml(want, got):
@@ -256,6 +245,7 @@ def compare_xml(want, got):
     Based on http://codespeak.net/svn/lxml/trunk/src/lxml/doctestcompare.py
     """
     _norm_whitespace_re = re.compile(r'[ \t\n][ \t\n]+')
+
     def norm_whitespace(v):
         return _norm_whitespace_re.sub(' ', v)
 
@@ -295,8 +285,8 @@ def compare_xml(want, got):
                 return node
 
     want, got = strip_quotes(want, got)
-    want = want.replace('\\n','\n')
-    got = got.replace('\\n','\n')
+    want = want.replace('\\n', '\n')
+    got = got.replace('\\n', '\n')
 
     # If the string is not a complete xml document, we may need to add a
     # root element. This allow us to compare fragments, like "<foo/><bar/>"
@@ -385,13 +375,14 @@ class CaptureQueriesContext(object):
 
 class IgnoreDeprecationWarningsMixin(object):
 
-    warning_class = DeprecationWarning
+    warning_classes = [DeprecationWarning]
 
     def setUp(self):
         super(IgnoreDeprecationWarningsMixin, self).setUp()
         self.catch_warnings = warnings.catch_warnings()
         self.catch_warnings.__enter__()
-        warnings.filterwarnings("ignore", category=self.warning_class)
+        for warning_class in self.warning_classes:
+            warnings.filterwarnings("ignore", category=warning_class)
 
     def tearDown(self):
         self.catch_warnings.__exit__(*sys.exc_info())
@@ -400,4 +391,55 @@ class IgnoreDeprecationWarningsMixin(object):
 
 class IgnorePendingDeprecationWarningsMixin(IgnoreDeprecationWarningsMixin):
 
-        warning_class = PendingDeprecationWarning
+        warning_classes = [PendingDeprecationWarning]
+
+
+class IgnoreAllDeprecationWarningsMixin(IgnoreDeprecationWarningsMixin):
+
+        warning_classes = [PendingDeprecationWarning, DeprecationWarning]
+
+
+@contextmanager
+def patch_logger(logger_name, log_level):
+    """
+    Context manager that takes a named logger and the logging level
+    and provides a simple mock-like list of messages received
+    """
+    calls = []
+
+    def replacement(msg):
+        calls.append(msg)
+    logger = logging.getLogger(logger_name)
+    orig = getattr(logger, log_level)
+    setattr(logger, log_level, replacement)
+    try:
+        yield calls
+    finally:
+        setattr(logger, log_level, orig)
+
+
+class TransRealMixin(object):
+    """This is the only way to reset the translation machinery. Otherwise
+    the test suite occasionally fails because of global state pollution
+    between tests."""
+    def flush_caches(self):
+        from django.utils.translation import trans_real
+        trans_real._translations = {}
+        trans_real._active = local()
+        trans_real._default = None
+        trans_real._accepted = {}
+        trans_real._checked_languages = {}
+
+    def tearDown(self):
+        self.flush_caches()
+        super(TransRealMixin, self).tearDown()
+
+
+# On OSes that don't provide tzset (Windows), we can't set the timezone
+# in which the program runs. As a consequence, we must skip tests that
+# don't enforce a specific timezone (with timezone.override or equivalent),
+# or attempt to interpret naive datetimes in the default timezone.
+
+requires_tz_support = skipUnless(TZ_SUPPORT,
+        "This test relies on the ability to run a program in an arbitrary "
+        "time zone, but your operating system isn't able to do that.")

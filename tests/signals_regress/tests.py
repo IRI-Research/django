@@ -1,9 +1,9 @@
-from __future__ import absolute_import
+from __future__ import unicode_literals
 
 from django.db import models
 from django.test import TestCase
 
-from shared_models.models import Author, Book
+from .models import Author, Book
 
 
 class SignalsRegressTests(TestCase):
@@ -34,20 +34,20 @@ class SignalsRegressTests(TestCase):
 
     def pre_delete_test(self, signal, sender, instance, **kwargs):
         self.signal_output.append('pre_save signal, %s' % instance)
-        self.signal_output.append('instance.id is not None: %s' % (instance.id != None))
+        self.signal_output.append('instance.id is not None: %s' % (instance.id is not None))
 
     def post_delete_test(self, signal, sender, instance, **kwargs):
         self.signal_output.append('post_delete signal, %s' % instance)
-        self.signal_output.append('instance.id is not None: %s' % (instance.id != None))
+        self.signal_output.append('instance.id is not None: %s' % (instance.id is not None))
 
     def setUp(self):
         self.signal_output = []
         # Save up the number of connected signals so that we can check at the end
         # that all the signals we register get properly unregistered (#9989)
         self.pre_signals = (len(models.signals.pre_save.receivers),
-                       len(models.signals.post_save.receivers),
-                       len(models.signals.pre_delete.receivers),
-                       len(models.signals.post_delete.receivers))
+                            len(models.signals.post_save.receivers),
+                            len(models.signals.pre_delete.receivers),
+                            len(models.signals.post_delete.receivers))
 
         models.signals.pre_save.connect(self.pre_save_test)
         models.signals.post_save.connect(self.post_save_test)
@@ -77,7 +77,7 @@ class SignalsRegressTests(TestCase):
             "Is created"
         ])
 
-        b1 = Book(title='Snow Crash', pubdate='2012-02-02 12:00')
+        b1 = Book(name='Snow Crash')
         self.assertEqual(self.get_signal_output(b1.save), [
             "pre_save signal, Snow Crash",
             "post_save signal, Snow Crash",
@@ -87,7 +87,7 @@ class SignalsRegressTests(TestCase):
     def test_m2m_signals(self):
         """ Assigning and removing to/from m2m shouldn't generate an m2m signal """
 
-        b1 = Book(title='Snow Crash', pubdate='2012-02-02 12:00')
+        b1 = Book(name='Snow Crash')
         self.get_signal_output(b1.save)
         a1 = Author(name='Neal Stephenson')
         self.get_signal_output(a1.save)

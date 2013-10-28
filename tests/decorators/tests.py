@@ -1,4 +1,5 @@
 from functools import wraps
+from unittest import TestCase
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
@@ -6,7 +7,6 @@ from django.http import HttpResponse, HttpRequest, HttpResponseNotAllowed
 from django.middleware.clickjacking import XFrameOptionsMiddleware
 from django.utils.decorators import method_decorator
 from django.utils.functional import allow_lazy, lazy, memoize
-from django.utils.unittest import TestCase
 from django.views.decorators.cache import cache_page, never_cache, cache_control
 from django.views.decorators.clickjacking import xframe_options_deny, xframe_options_sameorigin, xframe_options_exempt
 from django.views.decorators.http import require_http_methods, require_GET, require_POST, require_safe, condition
@@ -22,6 +22,7 @@ fully_decorated.anything = "Expected __dict__"
 def compose(*functions):
     # compose(f, g)(*args, **kwargs) == f(g(*args, **kwargs))
     functions = list(reversed(functions))
+
     def _inner(*args, **kwargs):
         result = functions[0](*args, **kwargs)
         for f in functions[1:]:
@@ -49,7 +50,7 @@ full_decorator = compose(
 
     # django.contrib.auth.decorators
     # Apply user_passes_test twice to check #9474
-    user_passes_test(lambda u:True),
+    user_passes_test(lambda u: True),
     login_required,
     permission_required('change_world'),
 
@@ -94,8 +95,11 @@ class DecoratorsTest(TestCase):
         callback = user_passes_test(test1)(callback)
         callback = user_passes_test(test2)(callback)
 
-        class DummyUser(object): pass
-        class DummyRequest(object): pass
+        class DummyUser(object):
+            pass
+
+        class DummyRequest(object):
+            pass
 
         request = DummyRequest()
         request.user = DummyUser()

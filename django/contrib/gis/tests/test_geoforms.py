@@ -1,14 +1,16 @@
+from unittest import skipUnless
+
 from django.forms import ValidationError
 from django.contrib.gis.gdal import HAS_GDAL
 from django.contrib.gis.tests.utils import HAS_SPATIALREFSYS
 from django.test import SimpleTestCase
 from django.utils import six
-from django.utils.unittest import skipUnless
-
+from django.utils.html import escape
 
 if HAS_SPATIALREFSYS:
     from django.contrib.gis import forms
     from django.contrib.gis.geos import GEOSGeometry
+
 
 @skipUnless(HAS_GDAL and HAS_SPATIALREFSYS, "GeometryFieldTest needs gdal support and a spatial database")
 class GeometryFieldTest(SimpleTestCase):
@@ -143,7 +145,7 @@ class SpecializedFieldTest(SimpleTestCase):
 
     def assertTextarea(self, geom, rendered):
         """Makes sure the wkt and a textarea are in the content"""
-        
+
         self.assertIn('<textarea ', rendered)
         self.assertIn('required', rendered)
         self.assertIn(geom.wkt, rendered)
@@ -161,7 +163,7 @@ class SpecializedFieldTest(SimpleTestCase):
         self.assertFalse(invalid.is_valid())
         self.assertTrue('Invalid geometry value' in str(invalid.errors))
 
-        for invalid in [geom for key, geom in self.geometries.items() if key!='point']:
+        for invalid in [geo for key, geo in self.geometries.items() if key != 'point']:
             self.assertFalse(PointForm(data={'p': invalid.wkt}).is_valid())
 
     def test_multipointfield(self):
@@ -174,7 +176,7 @@ class SpecializedFieldTest(SimpleTestCase):
         self.assertMapWidget(form)
         self.assertFalse(PointForm().is_valid())
 
-        for invalid in [geom for key, geom in self.geometries.items() if key!='multipoint']:
+        for invalid in [geo for key, geo in self.geometries.items() if key != 'multipoint']:
             self.assertFalse(PointForm(data={'p': invalid.wkt}).is_valid())
 
     def test_linestringfield(self):
@@ -187,7 +189,7 @@ class SpecializedFieldTest(SimpleTestCase):
         self.assertMapWidget(form)
         self.assertFalse(LineStringForm().is_valid())
 
-        for invalid in [geom for key, geom in self.geometries.items() if key!='linestring']:
+        for invalid in [geo for key, geo in self.geometries.items() if key != 'linestring']:
             self.assertFalse(LineStringForm(data={'p': invalid.wkt}).is_valid())
 
     def test_multilinestringfield(self):
@@ -200,7 +202,7 @@ class SpecializedFieldTest(SimpleTestCase):
         self.assertMapWidget(form)
         self.assertFalse(LineStringForm().is_valid())
 
-        for invalid in [geom for key, geom in self.geometries.items() if key!='multilinestring']:
+        for invalid in [geo for key, geo in self.geometries.items() if key != 'multilinestring']:
             self.assertFalse(LineStringForm(data={'p': invalid.wkt}).is_valid())
 
     def test_polygonfield(self):
@@ -213,7 +215,7 @@ class SpecializedFieldTest(SimpleTestCase):
         self.assertMapWidget(form)
         self.assertFalse(PolygonForm().is_valid())
 
-        for invalid in [geom for key, geom in self.geometries.items() if key!='polygon']:
+        for invalid in [geo for key, geo in self.geometries.items() if key != 'polygon']:
             self.assertFalse(PolygonForm(data={'p': invalid.wkt}).is_valid())
 
     def test_multipolygonfield(self):
@@ -226,7 +228,7 @@ class SpecializedFieldTest(SimpleTestCase):
         self.assertMapWidget(form)
         self.assertFalse(PolygonForm().is_valid())
 
-        for invalid in [geom for key, geom in self.geometries.items() if key!='multipolygon']:
+        for invalid in [geo for key, geo in self.geometries.items() if key != 'multipolygon']:
             self.assertFalse(PolygonForm(data={'p': invalid.wkt}).is_valid())
 
     def test_geometrycollectionfield(self):
@@ -239,5 +241,50 @@ class SpecializedFieldTest(SimpleTestCase):
         self.assertMapWidget(form)
         self.assertFalse(GeometryForm().is_valid())
 
-        for invalid in [geom for key, geom in self.geometries.items() if key!='geometrycollection']:
+        for invalid in [geo for key, geo in self.geometries.items() if key != 'geometrycollection']:
             self.assertFalse(GeometryForm(data={'g': invalid.wkt}).is_valid())
+
+    def test_osm_widget(self):
+        class PointForm(forms.Form):
+            p = forms.PointField(widget=forms.OSMWidget)
+
+        geom = self.geometries['point']
+        form = PointForm(data={'p': geom})
+        rendered = form.as_p()
+        self.assertIn("OpenStreetMap (Mapnik)", rendered)
+        self.assertIn("id: 'id_p',", rendered)
+
+
+@skipUnless(HAS_GDAL and HAS_SPATIALREFSYS,
+    "CustomGeometryWidgetTest needs gdal support and a spatial database")
+class CustomGeometryWidgetTest(SimpleTestCase):
+
+    def test_custom_serialization_widget(self):
+        class CustomGeometryWidget(forms.BaseGeometryWidget):
+            template_name = 'gis/openlayers.html'
+            deserialize_called = 0
+
+            def serialize(self, value):
+                return value.json if value else ''
+
+            def deserialize(self, value):
+                self.deserialize_called += 1
+                return GEOSGeometry(value)
+
+        class PointForm(forms.Form):
+            p = forms.PointField(widget=CustomGeometryWidget)
+
+        point = GEOSGeometry("SRID=4326;POINT(9.052734375 42.451171875)")
+        form = PointForm(data={'p': point})
+        self.assertIn(escape(point.json), form.as_p())
+
+        CustomGeometryWidget.called = 0
+        widget = form.fields['p'].widget
+        # Force deserialize use due to a string value
+        self.assertIn(escape(point.json), widget.render('p', point.json))
+        self.assertEqual(widget.deserialize_called, 1)
+
+        form = PointForm(data={'p': point.json})
+        self.assertTrue(form.is_valid())
+        # Ensure that resulting geometry has srid set
+        self.assertEqual(form.cleaned_data['p'].srid, 4326)

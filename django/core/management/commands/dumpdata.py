@@ -1,10 +1,13 @@
+import warnings
+
+from collections import OrderedDict
+from optparse import make_option
+
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import BaseCommand, CommandError
 from django.core import serializers
 from django.db import router, DEFAULT_DB_ALIAS
-from django.utils.datastructures import SortedDict
 
-from optparse import make_option
 
 class Command(BaseCommand):
     option_list = BaseCommand.option_list + (
@@ -15,14 +18,19 @@ class Command(BaseCommand):
         make_option('--database', action='store', dest='database',
             default=DEFAULT_DB_ALIAS, help='Nominates a specific database to dump '
                 'fixtures from. Defaults to the "default" database.'),
-        make_option('-e', '--exclude', dest='exclude',action='append', default=[],
+        make_option('-e', '--exclude', dest='exclude', action='append', default=[],
             help='An appname or appname.ModelName to exclude (use multiple --exclude to exclude multiple apps/models).'),
         make_option('-n', '--natural', action='store_true', dest='use_natural_keys', default=False,
             help='Use natural keys if they are available.'),
+        make_option('--natural-foreign', action='store_true', dest='use_natural_foreign_keys', default=False,
+            help='Use natural foreign keys if they are available.'),
+        make_option('--natural-primary', action='store_true', dest='use_natural_primary_keys', default=False,
+            help='Use natural primary keys if they are available.'),
         make_option('-a', '--all', action='store_true', dest='use_base_manager', default=False,
             help="Use Django's base manager to dump all models stored in the database, including those that would otherwise be filtered or modified by a custom manager."),
-        make_option('--pks', dest='primary_keys', action='append', default=[],
-            help="Only dump objects with given primary keys. Accepts a comma seperated list of keys. This option will only work when you specify one model."),
+        make_option('--pks', dest='primary_keys', help="Only dump objects with "
+            "given primary keys. Accepts a comma separated list of keys. "
+            "This option will only work when you specify one model."),
     )
     help = ("Output the contents of the database as a fixture of the given "
             "format (using each model's default manager unless --all is "
@@ -38,13 +46,18 @@ class Command(BaseCommand):
         excludes = options.get('exclude')
         show_traceback = options.get('traceback')
         use_natural_keys = options.get('use_natural_keys')
+        if use_natural_keys:
+            warnings.warn("``--natural`` is deprecated; use ``--natural-foreign`` instead.",
+                PendingDeprecationWarning)
+        use_natural_foreign_keys = options.get('use_natural_foreign_keys') or use_natural_keys
+        use_natural_primary_keys = options.get('use_natural_primary_keys')
         use_base_manager = options.get('use_base_manager')
         pks = options.get('primary_keys')
 
         if pks:
             primary_keys = pks.split(',')
         else:
-            primary_keys = False
+            primary_keys = []
 
         excluded_apps = set()
         excluded_models = set()
@@ -65,11 +78,11 @@ class Command(BaseCommand):
         if len(app_labels) == 0:
             if primary_keys:
                 raise CommandError("You can only use --pks option with one model")
-            app_list = SortedDict((app, None) for app in get_apps() if app not in excluded_apps)
+            app_list = OrderedDict((app, None) for app in get_apps() if app not in excluded_apps)
         else:
             if len(app_labels) > 1 and primary_keys:
                 raise CommandError("You can only use --pks option with one model")
-            app_list = SortedDict()
+            app_list = OrderedDict()
             for label in app_labels:
                 try:
                     app_label, model_label = label.split('.')
@@ -104,11 +117,11 @@ class Command(BaseCommand):
         # Check that the serialization format exists; this is a shortcut to
         # avoid collating all the objects and _then_ failing.
         if format not in serializers.get_public_serializer_formats():
-            raise CommandError("Unknown serialization format: %s" % format)
+            try:
+                serializers.get_serializer(format)
+            except serializers.SerializerDoesNotExist:
+                pass
 
-        try:
-            serializers.get_serializer(format)
-        except KeyError:
             raise CommandError("Unknown serialization format: %s" % format)
 
         def get_objects():
@@ -116,7 +129,7 @@ class Command(BaseCommand):
             for model in sort_dependencies(app_list.items()):
                 if model in excluded_models:
                     continue
-                if not model._meta.proxy and router.allow_syncdb(using, model):
+                if not model._meta.proxy and router.allow_migrate(using, model):
                     if use_base_manager:
                         objects = model._base_manager
                     else:
@@ -131,7 +144,9 @@ class Command(BaseCommand):
         try:
             self.stdout.ending = None
             serializers.serialize(format, get_objects(), indent=indent,
-                    use_natural_keys=use_natural_keys, stream=self.stdout)
+                    use_natural_foreign_keys=use_natural_foreign_keys,
+                    use_natural_primary_keys=use_natural_primary_keys,
+                    stream=self.stdout)
         except Exception as e:
             if show_traceback:
                 raise

@@ -1,16 +1,16 @@
 """Translation helper functions."""
 from __future__ import unicode_literals
 
+from collections import OrderedDict
 import locale
 import os
 import re
 import sys
 import gettext as gettext_module
+from importlib import import_module
 from threading import local
 import warnings
 
-from django.utils.importlib import import_module
-from django.utils.datastructures import SortedDict
 from django.utils.encoding import force_str, force_text
 from django.utils.functional import memoize
 from django.utils._os import upath
@@ -80,7 +80,6 @@ class DjangoTranslation(gettext_module.GNUTranslations):
     def __init__(self, *args, **kw):
         gettext_module.GNUTranslations.__init__(self, *args, **kw)
         self.set_output_charset('utf-8')
-        self.django_output_charset = 'utf-8'
         self.__language = '??'
 
     def merge(self, other):
@@ -370,7 +369,7 @@ def get_supported_language_variant(lang_code, supported=None, strict=False):
     """
     if supported is None:
         from django.conf import settings
-        supported = SortedDict(settings.LANGUAGES)
+        supported = OrderedDict(settings.LANGUAGES)
     if lang_code:
         # if fr-CA is not supported, try fr-ca; if that fails, fallback to fr.
         generic_lang_code = lang_code.split('-')[0]
@@ -397,7 +396,7 @@ def get_language_from_path(path, supported=None, strict=False):
     """
     if supported is None:
         from django.conf import settings
-        supported = SortedDict(settings.LANGUAGES)
+        supported = OrderedDict(settings.LANGUAGES)
     regex_match = language_code_prefix_re.match(path)
     if not regex_match:
         return None
@@ -419,7 +418,7 @@ def get_language_from_request(request, check_path=False):
     """
     global _accepted
     from django.conf import settings
-    supported = SortedDict(settings.LANGUAGES)
+    supported = OrderedDict(settings.LANGUAGES)
 
     if check_path:
         lang_code = get_language_from_path(request.path_info, supported)
@@ -427,7 +426,8 @@ def get_language_from_request(request, check_path=False):
             return lang_code
 
     if hasattr(request, 'session'):
-        lang_code = request.session.get('django_language', None)
+        # for backwards compatibility django_language is also checked (remove in 1.8)
+        lang_code = request.session.get('_language', request.session.get('django_language'))
         if lang_code in supported and lang_code is not None and check_for_language(lang_code):
             return lang_code
 
@@ -641,7 +641,7 @@ def templatize(src, origin=None):
                     out.write(' _(%s) ' % cmatch.group(1))
                 for p in parts[1:]:
                     if p.find(':_(') >= 0:
-                        out.write(' %s ' % p.split(':',1)[1])
+                        out.write(' %s ' % p.split(':', 1)[1])
                     else:
                         out.write(blankout(p, 'F'))
             elif t.token_type == TOKEN_COMMENT:
@@ -665,13 +665,16 @@ def parse_accept_lang_header(lang_string):
     if pieces[-1]:
         return []
     for i in range(0, len(pieces) - 1, 3):
-        first, lang, priority = pieces[i : i + 3]
+        first, lang, priority = pieces[i:i + 3]
         if first:
             return []
         if priority:
-            priority = float(priority)
+            try:
+                priority = float(priority)
+            except ValueError:
+                return []
         if not priority:        # if priority is 0.0 at this point make it 1.0
-             priority = 1.0
+            priority = 1.0
         result.append((lang, priority))
     result.sort(key=lambda k: k[1], reverse=True)
     return result

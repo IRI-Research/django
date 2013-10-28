@@ -1,15 +1,13 @@
 import collections
+import imp
+from importlib import import_module
+from optparse import OptionParser, NO_DEFAULT
 import os
 import sys
-from optparse import OptionParser, NO_DEFAULT
-import imp
-import warnings
 
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import BaseCommand, CommandError, handle_default_options
 from django.core.management.color import color_style
-from django.utils.importlib import import_module
-from django.utils._os import upath
 from django.utils import six
 
 # For backwards compatibility: get_version() used to be in this module.
@@ -101,7 +99,7 @@ def get_commands():
     """
     global _commands
     if _commands is None:
-        _commands = dict([(name, 'django.core') for name in find_commands(__path__[0])])
+        _commands = dict((name, 'django.core') for name in find_commands(__path__[0]))
 
         # Find the installed apps
         from django.conf import settings
@@ -116,8 +114,8 @@ def get_commands():
         for app_name in apps:
             try:
                 path = find_management_module(app_name)
-                _commands.update(dict([(name, app_name)
-                                       for name in find_commands(path)]))
+                _commands.update(dict((name, app_name)
+                                       for name in find_commands(path)))
             except ImportError:
                 pass # No management module - ignore this app
 
@@ -148,7 +146,7 @@ def call_command(name, *args, **options):
 
     # Grab out a list of defaults from the options. optparse does this for us
     # when the script runs from the command line, but since call_command can
-    # be called programatically, we need to simulate the loading and handling
+    # be called programmatically, we need to simulate the loading and handling
     # of defaults (see #10080 for details).
     defaults = {}
     for opt in klass.option_list:
@@ -211,7 +209,7 @@ class LaxOptionParser(OptionParser):
                     # dealing with options
                     del rargs[0]
                     raise Exception
-            except:
+            except:  # Needed because we might need to catch a SystemExit
                 largs.append(arg)
 
 class ManagementUtility(object):
@@ -251,6 +249,15 @@ class ManagementUtility(object):
                 usage.append(style.NOTICE("[%s]" % app))
                 for name in sorted(commands_dict[app]):
                     usage.append("    %s" % name)
+            # Output an extra note if settings are not properly configured
+            try:
+                from django.conf import settings
+                settings.INSTALLED_APPS
+            except ImproperlyConfigured as e:
+                usage.append(style.NOTICE(
+                    "Note that only Django core commands are listed as settings "
+                    "are not properly configured (error: %s)." % e))
+
         return '\n'.join(usage)
 
     def fetch_command(self, subcommand):
@@ -259,10 +266,12 @@ class ManagementUtility(object):
         appropriate command called from the command line (usually
         "django-admin.py" or "manage.py") if it can't be found.
         """
+        # Get commands outside of try block to prevent swallowing exceptions
+        commands = get_commands()
         try:
-            app_name = get_commands()[subcommand]
+            app_name = commands[subcommand]
         except KeyError:
-            sys.stderr.write("Unknown command: %r\nType '%s help' for usage.\n" % \
+            sys.stderr.write("Unknown command: %r\nType '%s help' for usage.\n" %
                 (subcommand, self.prog_name))
             sys.exit(1)
         if isinstance(app_name, BaseCommand):
@@ -338,7 +347,7 @@ class ManagementUtility(object):
             options = [opt for opt in options if opt[0] not in prev_opts]
 
             # filter options by current input
-            options = sorted([(k, v) for k, v in options if k.startswith(curr)])
+            options = sorted((k, v) for k, v in options if k.startswith(curr))
             for option in options:
                 opt_label = option[0]
                 # append '=' to options which require args
@@ -362,7 +371,7 @@ class ManagementUtility(object):
         try:
             options, args = parser.parse_args(self.argv)
             handle_default_options(options)
-        except:
+        except:  # Needed because parser.parse_args can raise SystemExit
             pass # Ignore any option errors at this point.
 
         try:

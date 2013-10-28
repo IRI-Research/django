@@ -7,11 +7,11 @@ import sys
 import types
 
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.http import (HttpResponse, HttpResponseServerError,
     HttpResponseNotFound, HttpRequest, build_request_repr)
 from django.template import Template, Context, TemplateDoesNotExist
 from django.template.defaultfilters import force_escape, pprint
+from django.utils.datastructures import MultiValueDict
 from django.utils.html import escape
 from django.utils.encoding import force_bytes, smart_text
 from django.utils.module_loading import import_by_path
@@ -40,7 +40,7 @@ def cleanse_setting(key, value):
             cleansed = CLEANSED_SUBSTITUTE
         else:
             if isinstance(value, dict):
-                cleansed = dict((k, cleanse_setting(k, v)) for k,v in value.items())
+                cleansed = dict((k, cleanse_setting(k, v)) for k, v in value.items())
             else:
                 cleansed = value
     except TypeError:
@@ -119,6 +119,20 @@ class SafeExceptionReporterFilter(ExceptionReporterFilter):
         """
         return settings.DEBUG is False
 
+    def get_cleansed_multivaluedict(self, request, multivaluedict):
+        """
+        Replaces the keys in a MultiValueDict marked as sensitive with stars.
+        This mitigates leaking sensitive POST parameters if something like
+        request.POST['nonexistent_key'] throws an exception (#21098).
+        """
+        sensitive_post_parameters = getattr(request, 'sensitive_post_parameters', [])
+        if self.is_active(request) and sensitive_post_parameters:
+            multivaluedict = multivaluedict.copy()
+            for param in sensitive_post_parameters:
+                if param in multivaluedict:
+                    multivaluedict[param] = CLEANSED_SUBSTITUTE
+        return multivaluedict
+
     def get_post_parameters(self, request):
         """
         Replaces the values of POST parameters marked as sensitive with
@@ -143,6 +157,15 @@ class SafeExceptionReporterFilter(ExceptionReporterFilter):
                     return cleansed
             else:
                 return request.POST
+
+    def cleanse_special_types(self, request, value):
+        if isinstance(value, HttpRequest):
+            # Cleanse the request's POST parameters.
+            value = self.get_request_repr(value)
+        elif isinstance(value, MultiValueDict):
+            # Cleanse MultiValueDicts (request.POST is the one we usually care about)
+            value = self.get_cleansed_multivaluedict(request, value)
+        return value
 
     def get_traceback_frame_variables(self, request, tb_frame):
         """
@@ -174,17 +197,14 @@ class SafeExceptionReporterFilter(ExceptionReporterFilter):
                 for name, value in tb_frame.f_locals.items():
                     if name in sensitive_variables:
                         value = CLEANSED_SUBSTITUTE
-                    elif isinstance(value, HttpRequest):
-                        # Cleanse the request's POST parameters.
-                        value = self.get_request_repr(value)
+                    else:
+                        value = self.cleanse_special_types(request, value)
                     cleansed[name] = value
         else:
-            # Potentially cleanse only the request if it's one of the frame variables.
+            # Potentially cleanse the request and any MultiValueDicts if they
+            # are one of the frame variables.
             for name, value in tb_frame.f_locals.items():
-                if isinstance(value, HttpRequest):
-                    # Cleanse the request's POST parameters.
-                    value = self.get_request_repr(value)
-                cleansed[name] = value
+                cleansed[name] = self.cleanse_special_types(request, value)
 
         if (tb_frame.f_code.co_name == 'sensitive_variables_wrapper'
             and 'sensitive_variables_wrapper' in tb_frame.f_locals):
@@ -228,12 +248,16 @@ class ExceptionReporter(object):
         return "File exists"
 
     def get_traceback_data(self):
-        "Return a Context instance containing traceback information."
+        """Return a dictionary containing traceback information."""
 
         if self.exc_type and issubclass(self.exc_type, TemplateDoesNotExist):
             from django.template.loader import template_source_loaders
             self.template_does_not_exist = True
             self.loader_debug_info = []
+            # If the template_source_loaders haven't been populated yet, you need
+            # to provide an empty list for this for loop to not fail.
+            if template_source_loaders is None:
+                template_source_loaders = []
             for loader in template_source_loaders:
                 try:
                     source_list_func = loader.get_template_sources
@@ -279,7 +303,7 @@ class ExceptionReporter(object):
             'sys_version_info': '%d.%d.%d' % sys.version_info[0:3],
             'server_time': datetime.datetime.now(),
             'django_version_info': get_version(),
-            'sys_path' : sys.path,
+            'sys_path': sys.path,
             'template_info': self.template_info,
             'template_does_not_exist': self.template_does_not_exist,
             'loader_debug_info': self.loader_debug_info,
@@ -296,13 +320,13 @@ class ExceptionReporter(object):
     def get_traceback_html(self):
         "Return HTML version of debug 500 HTTP error page."
         t = Template(TECHNICAL_500_TEMPLATE, name='Technical 500 template')
-        c = Context(self.get_traceback_data())
+        c = Context(self.get_traceback_data(), use_l10n=False)
         return t.render(c)
 
     def get_traceback_text(self):
         "Return plain text version of debug 500 HTTP error page."
         t = Template(TECHNICAL_500_TEXT_TEMPLATE, name='Technical 500 template')
-        c = Context(self.get_traceback_data(), autoescape=False)
+        c = Context(self.get_traceback_data(), autoescape=False, use_l10n=False)
         return t.render(c)
 
     def get_template_exception_info(self):
@@ -319,7 +343,7 @@ class ExceptionReporter(object):
                 before = escape(template_source[upto:start])
                 during = escape(template_source[start:end])
                 after = escape(template_source[end:next])
-            source_lines.append( (num, escape(template_source[upto:next])) )
+            source_lines.append((num, escape(template_source[upto:next])))
             upto = next
         total = len(source_lines)
 
@@ -405,7 +429,7 @@ class ExceptionReporter(object):
             if pre_context_lineno is not None:
                 frames.append({
                     'tb': tb,
-                    'type': module_name.startswith('django.') and 'django' or 'user',
+                    'type': 'django' if module_name.startswith('django.') else 'user',
                     'filename': filename,
                     'function': function,
                     'lineno': lineno + 1,
@@ -426,7 +450,7 @@ class ExceptionReporter(object):
         """
         import traceback
         frames = self.get_traceback_frames()
-        tb = [ (f['filename'], f['lineno'], f['function'], f['context_line']) for f in frames ]
+        tb = [(f['filename'], f['lineno'], f['function'], f['context_line']) for f in frames]
         list = ['Traceback (most recent call last):\n']
         list += traceback.format_list(tb)
         list += traceback.format_exception_only(self.exc_type, self.exc_value)
@@ -568,7 +592,7 @@ TECHNICAL_500_TEMPLATE = """
       for (var i = 0; i < arguments.length; i++) {
         var e = document.getElementById(arguments[i]);
         if (e) {
-          e.style.display = e.style.display == 'none' ? 'block' : 'none';
+          e.style.display = e.style.display == 'none' ? 'block': 'none';
         }
       }
       return false;
@@ -584,7 +608,7 @@ TECHNICAL_500_TEMPLATE = """
     function switchPastebinFriendly(link) {
       s1 = "Switch to copy-and-paste view";
       s2 = "Switch back to interactive view";
-      link.innerHTML = link.innerHTML == s1 ? s2 : s1;
+      link.innerHTML = link.innerHTML == s1 ? s2: s1;
       toggle('browserTraceback', 'pastebinTraceback');
       return false;
     }
@@ -595,7 +619,7 @@ TECHNICAL_500_TEMPLATE = """
 <body>
 <div id="summary">
   <h1>{% if exception_type %}{{ exception_type }}{% else %}Report{% endif %}{% if request %} at {{ request.path_info|escape }}{% endif %}</h1>
-  <pre class="exception_value">{% if exception_value %}{{ exception_value|force_escape }}{% else %}No exception supplied{% endif %}</pre>
+  <pre class="exception_value">{% if exception_value %}{{ exception_value|force_escape }}{% else %}No exception message supplied{% endif %}</pre>
   <table class="meta">
 {% if request %}
     <tr>
@@ -940,7 +964,7 @@ Exception Value: {{ exception_value|force_escape }}
 """
 
 TECHNICAL_500_TEXT_TEMPLATE = """{% load firstof from future %}{% firstof exception_type 'Report' %}{% if request %} at {{ request.path_info }}{% endif %}
-{% firstof exception_value 'No exception supplied' %}
+{% firstof exception_value 'No exception message supplied' %}
 {% if request %}
 Request Method: {{ request.META.REQUEST_METHOD }}
 Request URL: {{ request.build_absolute_uri }}{% endif %}

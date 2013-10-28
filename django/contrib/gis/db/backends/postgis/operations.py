@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.gis.db.backends.base import BaseSpatialOperations
-from django.contrib.gis.db.backends.util import SpatialOperation, SpatialFunction
+from django.contrib.gis.db.backends.utils import SpatialOperation, SpatialFunction
 from django.contrib.gis.db.backends.postgis.adapter import PostGISAdapter
 from django.contrib.gis.geometry.backend import Geometry
 from django.contrib.gis.measure import Distance
@@ -11,6 +11,10 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db.backends.postgresql_psycopg2.base import DatabaseOperations
 from django.db.utils import DatabaseError
 from django.utils import six
+from django.utils.functional import cached_property
+
+from .models import GeometryColumns, SpatialRefSys
+
 
 #### Classes used in constructing PostGIS spatial SQL ####
 class PostGISOperator(SpatialOperation):
@@ -40,6 +44,7 @@ class PostGISSpheroidDistance(PostGISFunction):
     "For PostGIS spherical distance operations (using the spheroid)."
     dist_func = 'distance_spheroid'
     sql_template = '%(function)s(%(geo_col)s, %(geometry)s, %%s) %(operator)s %%s'
+
     def __init__(self, prefix, operator):
         # An extra parameter in `end_subst` is needed for the spheroid string.
         super(PostGISSpheroidDistance, self).__init__(prefix, self.dist_func,
@@ -52,6 +57,7 @@ class PostGISSphereDistance(PostGISDistance):
 class PostGISRelate(PostGISFunctionParam):
     "For PostGIS Relate(<geom>, <pattern>) calls."
     pattern_regex = re.compile(r'^[012TF\*]{9}$')
+
     def __init__(self, prefix, pattern):
         if not self.pattern_regex.match(pattern):
             raise ValueError('Invalid intersection matrix pattern "%s".' % pattern)
@@ -62,9 +68,9 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
     compiler_module = 'django.contrib.gis.db.models.sql.compiler'
     name = 'postgis'
     postgis = True
+    geom_func_prefix = 'ST_'
     version_regex = re.compile(r'^(?P<major>\d)\.(?P<minor1>\d)\.(?P<minor2>\d+)')
-    valid_aggregates = dict([(k, None) for k in
-                             ('Collect', 'Extent', 'Extent3D', 'MakeLine', 'Union')])
+    valid_aggregates = {'Collect', 'Extent', 'Extent3D', 'MakeLine', 'Union'}
 
     Adapter = PostGISAdapter
     Adaptor = Adapter # Backwards-compatibility alias.
@@ -72,129 +78,92 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
     def __init__(self, connection):
         super(PostGISOperations, self).__init__(connection)
 
-        # Trying to get the PostGIS version because the function
-        # signatures will depend on the version used.  The cost
-        # here is a database query to determine the version, which
-        # can be mitigated by setting `POSTGIS_VERSION` with a 3-tuple
-        # comprising user-supplied values for the major, minor, and
-        # subminor revision of PostGIS.
-        try:
-            if hasattr(settings, 'POSTGIS_VERSION'):
-                vtup = settings.POSTGIS_VERSION
-                if len(vtup) == 3:
-                    # The user-supplied PostGIS version.
-                    version = vtup
-                else:
-                    # This was the old documented way, but it's stupid to
-                    # include the string.
-                    version = vtup[1:4]
-            else:
-                vtup = self.postgis_version_tuple()
-                version = vtup[1:]
-
-            # Getting the prefix -- even though we don't officially support
-            # PostGIS 1.2 anymore, keeping it anyway in case a prefix change
-            # for something else is necessary.
-            if version >= (1, 2, 2):
-                prefix = 'ST_'
-            else:
-                prefix = ''
-
-            self.geom_func_prefix = prefix
-            self.spatial_version = version
-        except DatabaseError:
-            raise ImproperlyConfigured(
-                'Cannot determine PostGIS version for database "%s". '
-                'GeoDjango requires at least PostGIS version 1.3. '
-                'Was the database created from a spatial database '
-                'template?' % self.connection.settings_dict['NAME']
-                )
-        # TODO: Raise helpful exceptions as they become known.
-
+        prefix = self.geom_func_prefix
         # PostGIS-specific operators. The commented descriptions of these
         # operators come from Section 7.6 of the PostGIS 1.4 documentation.
         self.geometry_operators = {
             # The "&<" operator returns true if A's bounding box overlaps or
             # is to the left of B's bounding box.
-            'overlaps_left' : PostGISOperator('&<'),
+            'overlaps_left': PostGISOperator('&<'),
             # The "&>" operator returns true if A's bounding box overlaps or
             # is to the right of B's bounding box.
-            'overlaps_right' : PostGISOperator('&>'),
+            'overlaps_right': PostGISOperator('&>'),
             # The "<<" operator returns true if A's bounding box is strictly
             # to the left of B's bounding box.
-            'left' : PostGISOperator('<<'),
+            'left': PostGISOperator('<<'),
             # The ">>" operator returns true if A's bounding box is strictly
             # to the right of B's bounding box.
-            'right' : PostGISOperator('>>'),
+            'right': PostGISOperator('>>'),
             # The "&<|" operator returns true if A's bounding box overlaps or
             # is below B's bounding box.
-            'overlaps_below' : PostGISOperator('&<|'),
+            'overlaps_below': PostGISOperator('&<|'),
             # The "|&>" operator returns true if A's bounding box overlaps or
             # is above B's bounding box.
-            'overlaps_above' : PostGISOperator('|&>'),
+            'overlaps_above': PostGISOperator('|&>'),
             # The "<<|" operator returns true if A's bounding box is strictly
             # below B's bounding box.
-            'strictly_below' : PostGISOperator('<<|'),
+            'strictly_below': PostGISOperator('<<|'),
             # The "|>>" operator returns true if A's bounding box is strictly
             # above B's bounding box.
-            'strictly_above' : PostGISOperator('|>>'),
+            'strictly_above': PostGISOperator('|>>'),
             # The "~=" operator is the "same as" operator. It tests actual
             # geometric equality of two features. So if A and B are the same feature,
             # vertex-by-vertex, the operator returns true.
-            'same_as' : PostGISOperator('~='),
-            'exact' : PostGISOperator('~='),
+            'same_as': PostGISOperator('~='),
+            'exact': PostGISOperator('~='),
             # The "@" operator returns true if A's bounding box is completely contained
             # by B's bounding box.
-            'contained' : PostGISOperator('@'),
+            'contained': PostGISOperator('@'),
             # The "~" operator returns true if A's bounding box completely contains
             #  by B's bounding box.
-            'bbcontains' : PostGISOperator('~'),
+            'bbcontains': PostGISOperator('~'),
             # The "&&" operator returns true if A's bounding box overlaps
             # B's bounding box.
-            'bboverlaps' : PostGISOperator('&&'),
-            }
+            'bboverlaps': PostGISOperator('&&'),
+        }
 
         self.geometry_functions = {
-            'equals' : PostGISFunction(prefix, 'Equals'),
-            'disjoint' : PostGISFunction(prefix, 'Disjoint'),
-            'touches' : PostGISFunction(prefix, 'Touches'),
-            'crosses' : PostGISFunction(prefix, 'Crosses'),
-            'within' : PostGISFunction(prefix, 'Within'),
-            'overlaps' : PostGISFunction(prefix, 'Overlaps'),
-            'contains' : PostGISFunction(prefix, 'Contains'),
-            'intersects' : PostGISFunction(prefix, 'Intersects'),
-            'relate' : (PostGISRelate, six.string_types),
-            'coveredby' : PostGISFunction(prefix, 'CoveredBy'),
-            'covers' : PostGISFunction(prefix, 'Covers'),
+            'equals': PostGISFunction(prefix, 'Equals'),
+            'disjoint': PostGISFunction(prefix, 'Disjoint'),
+            'touches': PostGISFunction(prefix, 'Touches'),
+            'crosses': PostGISFunction(prefix, 'Crosses'),
+            'within': PostGISFunction(prefix, 'Within'),
+            'overlaps': PostGISFunction(prefix, 'Overlaps'),
+            'contains': PostGISFunction(prefix, 'Contains'),
+            'intersects': PostGISFunction(prefix, 'Intersects'),
+            'relate': (PostGISRelate, six.string_types),
+            'coveredby': PostGISFunction(prefix, 'CoveredBy'),
+            'covers': PostGISFunction(prefix, 'Covers'),
         }
 
         # Valid distance types and substitutions
         dtypes = (Decimal, Distance, float) + six.integer_types
+
         def get_dist_ops(operator):
             "Returns operations for both regular and spherical distances."
-            return {'cartesian' : PostGISDistance(prefix, operator),
-                    'sphere' : PostGISSphereDistance(prefix, operator),
-                    'spheroid' : PostGISSpheroidDistance(prefix, operator),
+            return {'cartesian': PostGISDistance(prefix, operator),
+                    'sphere': PostGISSphereDistance(prefix, operator),
+                    'spheroid': PostGISSpheroidDistance(prefix, operator),
                     }
         self.distance_functions = {
-            'distance_gt' : (get_dist_ops('>'), dtypes),
-            'distance_gte' : (get_dist_ops('>='), dtypes),
-            'distance_lt' : (get_dist_ops('<'), dtypes),
-            'distance_lte' : (get_dist_ops('<='), dtypes),
-            'dwithin' : (PostGISFunctionParam(prefix, 'DWithin'), dtypes)
+            'distance_gt': (get_dist_ops('>'), dtypes),
+            'distance_gte': (get_dist_ops('>='), dtypes),
+            'distance_lt': (get_dist_ops('<'), dtypes),
+            'distance_lte': (get_dist_ops('<='), dtypes),
+            'dwithin': (PostGISFunctionParam(prefix, 'DWithin'), dtypes)
         }
 
         # Adding the distance functions to the geometries lookup.
         self.geometry_functions.update(self.distance_functions)
 
         # Only PostGIS versions 1.3.4+ have GeoJSON serialization support.
-        if version < (1, 3, 4):
+        if self.spatial_version < (1, 3, 4):
             GEOJSON = False
         else:
             GEOJSON = prefix + 'AsGeoJson'
 
         # ST_ContainsProperly ST_MakeLine, and ST_GeoHash added in 1.4.
-        if version >= (1, 4, 0):
+        if self.spatial_version >= (1, 4, 0):
             GEOHASH = 'ST_GeoHash'
             BOUNDINGCIRCLE = 'ST_MinimumBoundingCircle'
             self.geometry_functions['contains_properly'] = PostGISFunction(prefix, 'ContainsProperly')
@@ -202,7 +171,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
             GEOHASH, BOUNDINGCIRCLE = False, False
 
         # Geography type support added in 1.5.
-        if version >= (1, 5, 0):
+        if self.spatial_version >= (1, 5, 0):
             self.geography = True
             # Only a subset of the operators and functions are available
             # for the geography type.
@@ -217,7 +186,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
             }
 
         # Native geometry type support added in PostGIS 2.0.
-        if version >= (2, 0, 0):
+        if self.spatial_version >= (2, 0, 0):
             self.geometry = True
 
         # Creating a dictionary lookup of all GIS terms for PostGIS.
@@ -260,7 +229,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
         self.union = prefix + 'Union'
         self.unionagg = prefix + 'Union'
 
-        if version >= (2, 0, 0):
+        if self.spatial_version >= (2, 0, 0):
             self.extent3d = prefix + '3DExtent'
             self.length3d = prefix + '3DLength'
             self.perimeter3d = prefix + '3DPerimeter'
@@ -268,6 +237,30 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
             self.extent3d = prefix + 'Extent3D'
             self.length3d = prefix + 'Length3D'
             self.perimeter3d = prefix + 'Perimeter3D'
+
+    @cached_property
+    def spatial_version(self):
+        """Determine the version of the PostGIS library."""
+        # Trying to get the PostGIS version because the function
+        # signatures will depend on the version used.  The cost
+        # here is a database query to determine the version, which
+        # can be mitigated by setting `POSTGIS_VERSION` with a 3-tuple
+        # comprising user-supplied values for the major, minor, and
+        # subminor revision of PostGIS.
+        if hasattr(settings, 'POSTGIS_VERSION'):
+            version = settings.POSTGIS_VERSION
+        else:
+            try:
+                vtup = self.postgis_version_tuple()
+            except DatabaseError:
+                raise ImproperlyConfigured(
+                    'Cannot determine PostGIS version for database "%s". '
+                    'GeoDjango requires at least PostGIS version 1.3. '
+                    'Was the database created from a spatial database '
+                    'template?' % self.connection.settings_dict['NAME']
+                )
+            version = vtup[1:]
+        return version
 
     def check_aggregate_support(self, aggregate):
         """
@@ -462,8 +455,11 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
         Helper routine that returns a boolean indicating whether the number of
         parameters is correct for the lookup type.
         """
-        def exactly_two(np): return np == 2
-        def two_to_three(np): return np >= 2 and np <=3
+        def exactly_two(np):
+            return np == 2
+
+        def two_to_three(np):
+            return np >= 2 and np <= 3
         if (lookup_type in self.distance_functions and
             lookup_type != 'dwithin'):
             return two_to_three(num_param)
@@ -572,9 +568,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
 
     # Routines for getting the OGC-compliant models.
     def geometry_columns(self):
-        from django.contrib.gis.db.backends.postgis.models import GeometryColumns
         return GeometryColumns
 
     def spatial_ref_sys(self):
-        from django.contrib.gis.db.backends.postgis.models import SpatialRefSys
         return SpatialRefSys

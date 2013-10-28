@@ -9,7 +9,7 @@ GeoDjango Forms API
 
 .. versionadded:: 1.6
 
-GeoDjango provides some specialized form fields and widgets in order to visually 
+GeoDjango provides some specialized form fields and widgets in order to visually
 display and edit geolocalized data on a map. By default, they use
 `OpenLayers`_-powered maps, with a base WMS layer provided by `Metacarta`_.
 
@@ -114,11 +114,11 @@ from other Django widget attributes.
 
     SRID code used by the map (default is 4326).
 
-.. attribute:: BaseGeometryWidget.display_wkt
+.. attribute:: BaseGeometryWidget.display_raw
 
-    Boolean value specifying if a textarea input showing the WKT representation
-    of the current geometry is visible, mainly for debugging purposes (default
-    is ``False``).
+    Boolean value specifying if a textarea input showing the serialized
+    representation of the current geometry is visible, mainly for debugging
+    purposes (default is ``False``).
 
 .. attribute:: BaseGeometryWidget.supports_3d
 

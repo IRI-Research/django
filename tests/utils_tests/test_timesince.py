@@ -3,8 +3,10 @@ from __future__ import unicode_literals
 import datetime
 import unittest
 
+from django.test.utils import requires_tz_support
 from django.utils.timesince import timesince, timeuntil
-from django.utils.tzinfo import LocalTimezone, FixedOffset
+from django.utils import timezone
+
 
 class TimesinceTests(unittest.TestCase):
 
@@ -92,14 +94,20 @@ class TimesinceTests(unittest.TestCase):
         self.assertEqual(timesince(self.t,
             self.t-4*self.oneday-5*self.oneminute), '0\xa0minutes')
 
+    @requires_tz_support
     def test_different_timezones(self):
         """ When using two different timezones. """
         now = datetime.datetime.now()
-        now_tz = datetime.datetime.now(LocalTimezone(now))
-        now_tz_i = datetime.datetime.now(FixedOffset((3 * 60) + 15))
+        now_tz = timezone.make_aware(now, timezone.get_default_timezone())
+        now_tz_i = timezone.localtime(now_tz, timezone.get_fixed_timezone(195))
 
         self.assertEqual(timesince(now), '0\xa0minutes')
         self.assertEqual(timesince(now_tz), '0\xa0minutes')
+        self.assertEqual(timesince(now_tz_i), '0\xa0minutes')
+        self.assertEqual(timesince(now_tz, now_tz_i), '0\xa0minutes')
+        self.assertEqual(timeuntil(now), '0\xa0minutes')
+        self.assertEqual(timeuntil(now_tz), '0\xa0minutes')
+        self.assertEqual(timeuntil(now_tz_i), '0\xa0minutes')
         self.assertEqual(timeuntil(now_tz, now_tz_i), '0\xa0minutes')
 
     def test_date_objects(self):

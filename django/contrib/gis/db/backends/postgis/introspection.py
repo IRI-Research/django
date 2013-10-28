@@ -9,6 +9,14 @@ class PostGISIntrospection(DatabaseIntrospection):
     # introspection is actually performed.
     postgis_types_reverse = {}
 
+    ignored_tables = DatabaseIntrospection.ignored_tables + [
+        'geography_columns',
+        'geometry_columns',
+        'raster_columns',
+        'spatial_ref_sys',
+        'raster_overviews',
+    ]
+
     def get_postgis_types(self):
         """
         Returns a dictionary with keys that are the PostgreSQL object
@@ -24,14 +32,14 @@ class PostGISIntrospection(DatabaseIntrospection):
         try:
             cursor.execute(oid_sql, ('geometry',))
             GEOM_TYPE = cursor.fetchone()[0]
-            postgis_types = { GEOM_TYPE : 'GeometryField' }
+            postgis_types = {GEOM_TYPE: 'GeometryField'}
             if self.connection.ops.geography:
                 cursor.execute(oid_sql, ('geography',))
                 GEOG_TYPE = cursor.fetchone()[0]
                 # The value for the geography type is actually a tuple
                 # to pass in the `geography=True` keyword to the field
                 # definition.
-                postgis_types[GEOG_TYPE] = ('GeometryField', {'geography' : True})
+                postgis_types[GEOG_TYPE] = ('GeometryField', {'geography': True})
         finally:
             cursor.close()
 
@@ -64,7 +72,8 @@ class PostGISIntrospection(DatabaseIntrospection):
                                'WHERE "f_table_name"=%s AND "f_geometry_column"=%s',
                                (table_name, geo_col))
                 row = cursor.fetchone()
-                if not row: raise GeoIntrospectionError
+                if not row:
+                    raise GeoIntrospectionError
             except GeoIntrospectionError:
                 if self.connection.ops.geography:
                     cursor.execute('SELECT "coord_dimension", "srid", "type" '

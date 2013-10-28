@@ -1,6 +1,7 @@
+import unittest
+
 from django.dispatch.saferef import safeRef
 from django.utils.six.moves import xrange
-from django.utils import unittest
 
 class Test1(object):
     def x(self):
@@ -68,4 +69,4 @@ class SaferefTests(unittest.TestCase):
 
     def _closure(self, ref):
         """Dumb utility mechanism to increment deletion counter"""
-        self.closureCount +=1
+        self.closureCount += 1

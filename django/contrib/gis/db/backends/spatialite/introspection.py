@@ -9,13 +9,13 @@ class GeoFlexibleFieldLookupDict(FlexibleFieldLookupDict):
     """
     base_data_types_reverse = FlexibleFieldLookupDict.base_data_types_reverse.copy()
     base_data_types_reverse.update(
-        {'point' : 'GeometryField',
-         'linestring' : 'GeometryField',
-         'polygon' : 'GeometryField',
-         'multipoint' : 'GeometryField',
-         'multilinestring' : 'GeometryField',
-         'multipolygon' : 'GeometryField',
-         'geometrycollection' : 'GeometryField',
+        {'point': 'GeometryField',
+         'linestring': 'GeometryField',
+         'polygon': 'GeometryField',
+         'multipoint': 'GeometryField',
+         'multilinestring': 'GeometryField',
+         'multipolygon': 'GeometryField',
+         'geometrycollection': 'GeometryField',
          })
 
 class SpatiaLiteIntrospection(DatabaseIntrospection):
@@ -25,9 +25,10 @@ class SpatiaLiteIntrospection(DatabaseIntrospection):
         cursor = self.connection.cursor()
         try:
             # Querying the `geometry_columns` table to get additional metadata.
-            cursor.execute('SELECT "coord_dimension", "srid", "type" '
-                           'FROM "geometry_columns" '
-                           'WHERE "f_table_name"=%s AND "f_geometry_column"=%s',
+            type_col = 'type' if self.connection.ops.spatial_version < (4, 0, 0) else 'geometry_type'
+            cursor.execute('SELECT coord_dimension, srid, %s '
+                           'FROM geometry_columns '
+                           'WHERE f_table_name=%%s AND f_geometry_column=%%s' % type_col,
                            (table_name, geo_col))
             row = cursor.fetchone()
             if not row:

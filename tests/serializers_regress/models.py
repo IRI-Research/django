@@ -4,6 +4,7 @@ A test spanning all the capabilities of all the serializers.
 This class sets up a model for each model field type
 (except for image types, because of the Pillow/PIL dependency).
 """
+import warnings
 
 from django.db import models
 from django.contrib.contenttypes import generic
@@ -16,7 +17,7 @@ class BinaryData(models.Model):
     data = models.BinaryField(null=True)
 
 class BooleanData(models.Model):
-    data = models.BooleanField()
+    data = models.BooleanField(default=False)
 
 class CharData(models.Model):
     data = models.CharField(max_length=30, null=True)
@@ -52,7 +53,9 @@ class BigIntegerData(models.Model):
 #    data = models.ImageField(null=True)
 
 class IPAddressData(models.Model):
-    data = models.IPAddressField(null=True)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        data = models.IPAddressField(null=True)
 
 class GenericIPAddressData(models.Model):
     data = models.GenericIPAddressField(null=True)
@@ -115,6 +118,7 @@ class NaturalKeyAnchor(models.Model):
     objects = NaturalKeyAnchorManager()
 
     data = models.CharField(max_length=100, unique=True)
+    title = models.CharField(max_length=100, null=True)
 
     def natural_key(self):
         return (self.data,)
@@ -166,7 +170,7 @@ class Intermediate(models.Model):
 # or all database backends.
 
 class BooleanPKData(models.Model):
-    data = models.BooleanField(primary_key=True)
+    data = models.BooleanField(primary_key=True, default=False)
 
 class CharPKData(models.Model):
     data = models.CharField(max_length=30, primary_key=True)
@@ -199,7 +203,9 @@ class IntegerPKData(models.Model):
 #    data = models.ImageField(primary_key=True)
 
 class IPAddressPKData(models.Model):
-    data = models.IPAddressField(primary_key=True)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        data = models.IPAddressField(primary_key=True)
 
 class GenericIPAddressPKData(models.Model):
     data = models.GenericIPAddressField(primary_key=True)
@@ -239,15 +245,20 @@ class AutoNowDateTimeData(models.Model):
 class ModifyingSaveData(models.Model):
     data = models.IntegerField(null=True)
 
-    def save(self):
-        "A save method that modifies the data in the object"
+    def save(self, *args, **kwargs):
+        """
+        A save method that modifies the data in the object.
+        Verifies that a user-defined save() method isn't called when objects
+        are deserialized (#4459).
+        """
         self.data = 666
-        super(ModifyingSaveData, self).save(raw)
+        super(ModifyingSaveData, self).save(*args, **kwargs)
 
 # Tests for serialization of models using inheritance.
 # Regression for #7202, #7350
 class AbstractBaseModel(models.Model):
     parent_data = models.IntegerField()
+
     class Meta:
         abstract = True
 
@@ -277,4 +288,3 @@ class LengthModel(models.Model):
 
     def __len__(self):
         return self.data
-

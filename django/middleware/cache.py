@@ -96,7 +96,7 @@ class UpdateCacheMiddleware(object):
         # Control" header before reverting to using the default cache_timeout
         # length.
         timeout = get_max_age(response)
-        if timeout == None:
+        if timeout is None:
             timeout = self.cache_timeout
         elif timeout == 0:
             # max-age was set to 0, don't bother caching.
@@ -199,7 +199,7 @@ class CacheMiddleware(UpdateCacheMiddleware, FetchFromCacheMiddleware):
 
         if self.cache_anonymous_only:
             msg = "CACHE_MIDDLEWARE_ANONYMOUS_ONLY has been deprecated and will be removed in Django 1.8."
-            warnings.warn(msg, PendingDeprecationWarning, stacklevel=1)
+            warnings.warn(msg, DeprecationWarning, stacklevel=1)
 
         self.cache = get_cache(self.cache_alias, **cache_kwargs)
         self.cache_timeout = self.cache.default_timeout

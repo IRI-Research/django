@@ -64,7 +64,7 @@ class Store(models.Model):
 class Entries(models.Model):
     EntryID = models.AutoField(primary_key=True, db_column='Entry ID')
     Entry = models.CharField(unique=True, max_length=50)
-    Exclude = models.BooleanField()
+    Exclude = models.BooleanField(default=False)
 
 
 class Clues(models.Model):
@@ -87,3 +87,14 @@ class HardbackBook(Book):
 
     def __str__(self):
         return "%s (hardback): %s" % (self.name, self.weight)
+
+# Models for ticket #21150
+class Alfa(models.Model):
+    name = models.CharField(max_length=10, null=True)
+
+class Bravo(models.Model):
+    pass
+
+class Charlie(models.Model):
+    alfa = models.ForeignKey(Alfa, null=True)
+    bravo = models.ForeignKey(Bravo, null=True)

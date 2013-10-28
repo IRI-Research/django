@@ -148,6 +148,7 @@ class GeometryField(Field):
         value properly, and preserve any other lookup parameters before
         returning to the caller.
         """
+        value = super(GeometryField, self).get_prep_value(value)
         if isinstance(value, SQLEvaluator):
             return value
         elif isinstance(value, (tuple, list)):
@@ -202,9 +203,9 @@ class GeometryField(Field):
         return connection.ops.geo_db_type(self)
 
     def formfield(self, **kwargs):
-        defaults = {'form_class' : self.form_class,
-                    'geom_type' : self.geom_type,
-                    'srid' : self.srid,
+        defaults = {'form_class': self.form_class,
+                    'geom_type': self.geom_type,
+                    'srid': self.srid,
                     }
         defaults.update(kwargs)
         if (self.dim > 2 and not 'widget' in kwargs and

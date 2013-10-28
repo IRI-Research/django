@@ -7,11 +7,12 @@ file upload handlers for processing.
 from __future__ import unicode_literals
 
 import base64
+import binascii
 import cgi
 import sys
 
 from django.conf import settings
-from django.core.exceptions import SuspiciousOperation
+from django.core.exceptions import SuspiciousMultipartForm
 from django.utils.datastructures import MultiValueDict
 from django.utils.encoding import force_text
 from django.utils import six
@@ -33,6 +34,8 @@ RAW = "raw"
 FILE = "file"
 FIELD = "field"
 
+_BASE64_DECODE_ERROR = TypeError if six.PY2 else binascii.Error
+
 class MultiPartParser(object):
     """
     A rfc2388 multipart/form-data parser.
@@ -50,7 +53,7 @@ class MultiPartParser(object):
             The raw post data, as a file-like object.
         :upload_handlers:
             A list of UploadHandler instances that perform operations on the uploaded
-            data. 
+            data.
         :encoding:
             The encoding with which to treat the incoming data.
         """
@@ -161,8 +164,8 @@ class MultiPartParser(object):
                     if transfer_encoding == 'base64':
                         raw_data = field_stream.read()
                         try:
-                            data = str(raw_data).decode('base64')
-                        except:
+                            data = base64.b64decode(raw_data)
+                        except _BASE64_DECODE_ERROR:
                             data = raw_data
                     else:
                         data = field_stream.read()
@@ -177,11 +180,9 @@ class MultiPartParser(object):
                     file_name = force_text(file_name, encoding, errors='replace')
                     file_name = self.IE_sanitize(unescape_entities(file_name))
 
-                    content_type = meta_data.get('content-type', ('',))[0].strip()
-                    try:
-                        charset = meta_data.get('content-type', (0, {}))[1].get('charset', None)
-                    except:
-                        charset = None
+                    content_type, content_type_extra = meta_data.get('content-type', ('', {}))
+                    content_type = content_type.strip()
+                    charset = content_type_extra.get('charset')
 
                     try:
                         content_length = int(meta_data.get('content-length')[0])
@@ -194,7 +195,7 @@ class MultiPartParser(object):
                             try:
                                 handler.new_file(field_name, file_name,
                                                  content_type, content_length,
-                                                 charset)
+                                                 charset, content_type_extra)
                             except StopFutureHandlers:
                                 break
 
@@ -370,7 +371,7 @@ class LazyStream(six.Iterator):
                             if current_number == num_bytes])
 
         if number_equal > 40:
-            raise SuspiciousOperation(
+            raise SuspiciousMultipartForm(
                 "The multipart parser got stuck, which shouldn't happen with"
                 " normal uploaded files. Check for malicious upload activity;"
                 " if there is none, report this to the Django developers."
@@ -548,7 +549,7 @@ def parse_boundary_stream(stream, max_header_size):
         main_value_pair, params = parse_header(line)
         try:
             name, value = main_value_pair.split(':', 1)
-        except:
+        except ValueError:
             raise ValueError("Invalid header: %r" % line)
         return name, (value, params)
 
@@ -573,7 +574,7 @@ def parse_boundary_stream(stream, max_header_size):
         # parameters") is from the Python docs.
         try:
             name, (value, params) = _parse_header(line)
-        except:
+        except ValueError:
             continue
 
         if name == 'content-disposition':

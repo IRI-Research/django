@@ -7,6 +7,7 @@ import posixpath
 import shutil
 import sys
 import tempfile
+import unittest
 
 from django.template import loader, Context
 from django.conf import settings
@@ -21,6 +22,7 @@ from django.utils._os import rmtree_errorhandler, upath
 from django.utils import six
 
 from django.contrib.staticfiles import finders, storage
+from django.contrib.staticfiles.management.commands import collectstatic
 
 TEST_ROOT = os.path.dirname(upath(__file__))
 TEST_SETTINGS = {
@@ -561,7 +563,7 @@ class TestCollectionCachedStorage(BaseCollectionTestCase,
         """
         finders._finders.clear()
         err = six.StringIO()
-        with self.assertRaises(Exception) as cm:
+        with self.assertRaises(Exception):
             call_command('collectstatic', interactive=False, verbosity=0, stderr=err)
         self.assertEqual("Post-processing 'faulty.css' failed!\n\n", err.getvalue())
 
@@ -650,8 +652,7 @@ class TestServeDisabled(TestServeStatic):
         settings.DEBUG = False
 
     def test_disabled_serving(self):
-        six.assertRaisesRegex(self, ImproperlyConfigured, 'The staticfiles view '
-            'can only be used in debug mode ', self._response, 'test.txt')
+        self.assertFileNotFound('test.txt')
 
 
 class TestServeStaticWithDefaultURL(TestServeStatic, TestDefaults):
@@ -774,3 +775,76 @@ class TestTemplateTag(StaticFilesTestCase):
         self.assertStaticRenders("does/not/exist.png",
                                    "/static/does/not/exist.png")
         self.assertStaticRenders("testfile.txt", "/static/testfile.txt")
+
+
+class TestAppStaticStorage(TestCase):
+    def setUp(self):
+        # Creates a python module foo_module in a directory with non ascii
+        # characters
+        self.search_path = 'search_path_\xc3\xbc'
+        os.mkdir(self.search_path)
+        module_path = os.path.join(self.search_path, 'foo_module')
+        os.mkdir(module_path)
+        self.init_file = open(os.path.join(module_path, '__init__.py'), 'w')
+        sys.path.append(os.path.abspath(self.search_path))
+
+    def tearDown(self):
+        self.init_file.close()
+        sys.path.remove(os.path.abspath(self.search_path))
+        shutil.rmtree(self.search_path)
+
+    def test_app_with_non_ascii_characters_in_path(self):
+        """
+        Regression test for #18404 - Tests AppStaticStorage with a module that
+        has non ascii characters in path and a non utf8 file system encoding
+        """
+        # set file system encoding to a non unicode encoding
+        old_enc_func = sys.getfilesystemencoding
+        sys.getfilesystemencoding = lambda: 'ISO-8859-1'
+        try:
+            st = storage.AppStaticStorage('foo_module')
+            st.path('bar')
+        finally:
+            sys.getfilesystemencoding = old_enc_func
+
+
+class CustomStaticFilesStorage(storage.StaticFilesStorage):
+    """
+    Used in TestStaticFilePermissions
+    """
+    def __init__(self, *args, **kwargs):
+        kwargs['file_permissions_mode'] = 0o640
+        super(CustomStaticFilesStorage, self).__init__(*args, **kwargs)
+
+
+@unittest.skipIf(sys.platform.startswith('win'),
+                 "Windows only partially supports chmod.")
+class TestStaticFilePermissions(BaseCollectionTestCase, StaticFilesTestCase):
+
+    command_params = {'interactive': False,
+                      'post_process': True,
+                      'verbosity': '0',
+                      'ignore_patterns': ['*.ignoreme'],
+                      'use_default_ignore_patterns': True,
+                      'clear': False,
+                      'link': False,
+                      'dry_run': False}
+
+    # Don't run collectstatic command in this test class.
+    def run_collectstatic(self, **kwargs):
+        pass
+
+    @override_settings(FILE_UPLOAD_PERMISSIONS=0o655)
+    def test_collect_static_files_default_permissions(self):
+        collectstatic.Command().execute(**self.command_params)
+        test_file = os.path.join(settings.STATIC_ROOT, "test.txt")
+        file_mode = os.stat(test_file)[0] & 0o777
+        self.assertEqual(file_mode, 0o655)
+
+    @override_settings(FILE_UPLOAD_PERMISSIONS=0o655,
+                       STATICFILES_STORAGE='staticfiles_tests.tests.CustomStaticFilesStorage')
+    def test_collect_static_files_subclass_of_static_storage(self):
+        collectstatic.Command().execute(**self.command_params)
+        test_file = os.path.join(settings.STATIC_ROOT, "test.txt")
+        file_mode = os.stat(test_file)[0] & 0o777
+        self.assertEqual(file_mode, 0o640)

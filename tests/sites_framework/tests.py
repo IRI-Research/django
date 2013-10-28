@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.test import TestCase
@@ -30,9 +28,9 @@ class SitesFrameworkTestCase(TestCase):
         self.assertEqual(CustomArticle.on_site.all().get(), article)
 
     def test_invalid_name(self):
-        article = InvalidArticle.objects.create(title="Bad News!", site_id=settings.SITE_ID)
+        InvalidArticle.objects.create(title="Bad News!", site_id=settings.SITE_ID)
         self.assertRaises(ValueError, InvalidArticle.on_site.all)
 
     def test_invalid_field_type(self):
-        article = ConfusedArticle.objects.create(title="More Bad News!", site=settings.SITE_ID)
+        ConfusedArticle.objects.create(title="More Bad News!", site=settings.SITE_ID)
         self.assertRaises(TypeError, ConfusedArticle.on_site.all)

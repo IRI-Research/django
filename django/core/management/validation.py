@@ -51,6 +51,10 @@ def get_validation_errors(outfile, app=None):
 
         # If this is the current User model, check known validation problems with User models
         if settings.AUTH_USER_MODEL == '%s.%s' % (opts.app_label, opts.object_name):
+            # Check that REQUIRED_FIELDS is a list
+            if not isinstance(cls.REQUIRED_FIELDS, (list, tuple)):
+                e.add(opts, 'The REQUIRED_FIELDS must be a list or tuple.')
+
             # Check that the USERNAME FIELD isn't included in REQUIRED_FIELDS.
             if cls.USERNAME_FIELD in cls.REQUIRED_FIELDS:
                 e.add(opts, 'The field named as the USERNAME_FIELD should not be included in REQUIRED_FIELDS on a swappable User model.')
@@ -58,6 +62,9 @@ def get_validation_errors(outfile, app=None):
             # Check that the username field is unique
             if not opts.get_field(cls.USERNAME_FIELD).unique:
                 e.add(opts, 'The USERNAME_FIELD must be unique. Add unique=True to the field parameters.')
+
+        # Store a list of column names which have already been used by other fields.
+        used_column_names = []
 
         # Model isn't swapped; do field-specific validation.
         for f in opts.local_fields:
@@ -71,6 +78,17 @@ def get_validation_errors(outfile, app=None):
                 # consider NULL and '' to be equal (and thus set up
                 # character-based fields a little differently).
                 e.add(opts, '"%s": Primary key fields cannot have null=True.' % f.name)
+
+            # Column name validation.
+            # Determine which column name this field wants to use.
+            _, column_name = f.get_attname_column()
+
+            # Ensure the column name is not already in use.
+            if column_name and column_name in used_column_names:
+                e.add(opts, "Field '%s' has column name '%s' that is already used." % (f.name, column_name))
+            else:
+                used_column_names.append(column_name)
+
             if isinstance(f, models.CharField):
                 try:
                     max_length = int(f.max_length)
@@ -102,8 +120,6 @@ def get_validation_errors(outfile, app=None):
                 if decimalp_ok and mdigits_ok:
                     if decimal_places > max_digits:
                         e.add(opts, invalid_values_msg % f.name)
-            if isinstance(f, models.FileField) and not f.upload_to:
-                e.add(opts, '"%s": FileFields require an "upload_to" attribute.' % f.name)
             if isinstance(f, models.ImageField):
                 try:
                     from django.utils.image import Image
@@ -113,6 +129,8 @@ def get_validation_errors(outfile, app=None):
                 e.add(opts, '"%s": BooleanFields do not accept null values. Use a NullBooleanField instead.' % f.name)
             if isinstance(f, models.FilePathField) and not (f.allow_files or f.allow_folders):
                 e.add(opts, '"%s": FilePathFields must have either allow_files or allow_folders set to True.' % f.name)
+            if isinstance(f, models.GenericIPAddressField) and not getattr(f, 'null', False) and getattr(f, 'blank', False):
+                e.add(opts, '"%s": GenericIPAddressField can not accept blank values if null values are not allowed, as blank values are stored as null.' % f.name)
             if f.choices:
                 if isinstance(f.choices, six.string_types) or not is_iterable(f.choices):
                     e.add(opts, '"%s": "choices" should be iterable (e.g., a tuple or list).' % f.name)
@@ -155,7 +173,7 @@ def get_validation_errors(outfile, app=None):
                         for rel_field in f.foreign_related_fields:
                             has_unique_field = has_unique_field or rel_field.unique
                         if not has_unique_field:
-                            e.add(opts, "Field combination '%s' under model '%s' must have a unique=True constraint" % (','.join([rel_field.name for rel_field in f.foreign_related_fields]), f.rel.to.__name__))
+                            e.add(opts, "Field combination '%s' under model '%s' must have a unique=True constraint" % (','.join(rel_field.name for rel_field in f.foreign_related_fields), f.rel.to.__name__))
                     else:
                         if not f.foreign_related_fields[0].unique:
                             e.add(opts, "Field '%s' under model '%s' must have a unique=True constraint." % (f.foreign_related_fields[0].name, f.rel.to.__name__))
@@ -176,15 +194,15 @@ def get_validation_errors(outfile, app=None):
                             e.add(opts, "Reverse query name for field '%s' clashes with m2m field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.name, f.name))
                     for r in rel_opts.get_all_related_many_to_many_objects():
                         if r.get_accessor_name() == rel_name:
-                            e.add(opts, "Accessor for field '%s' clashes with related m2m field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.get_accessor_name(), f.name))
+                            e.add(opts, "Accessor for field '%s' clashes with accessor for field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, r.model._meta.object_name, r.field.name, f.name))
                         if r.get_accessor_name() == rel_query_name:
-                            e.add(opts, "Reverse query name for field '%s' clashes with related m2m field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.get_accessor_name(), f.name))
+                            e.add(opts, "Reverse query name for field '%s' clashes with accessor for field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, r.model._meta.object_name, r.field.name, f.name))
                     for r in rel_opts.get_all_related_objects():
                         if r.field is not f:
                             if r.get_accessor_name() == rel_name:
-                                e.add(opts, "Accessor for field '%s' clashes with related field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.get_accessor_name(), f.name))
+                                e.add(opts, "Accessor for field '%s' clashes with accessor for field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, r.model._meta.object_name, r.field.name, f.name))
                             if r.get_accessor_name() == rel_query_name:
-                                e.add(opts, "Reverse query name for field '%s' clashes with related field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.get_accessor_name(), f.name))
+                                e.add(opts, "Reverse query name for field '%s' clashes with accessor for field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, r.model._meta.object_name, r.field.name, f.name))
 
         seen_intermediary_signatures = []
         for i, f in enumerate(opts.local_many_to_many):
@@ -233,9 +251,9 @@ def get_validation_errors(outfile, app=None):
                                     "than one foreign key to %s, which is "
                                     "ambiguous and is not permitted." % (
                                         f.rel.through._meta.object_name,
-                                         from_model._meta.object_name
-                                     )
-                                 )
+                                        from_model._meta.object_name
+                                    )
+                                )
                             else:
                                 seen_from = True
                         elif rel_to == to_model:
@@ -305,14 +323,14 @@ def get_validation_errors(outfile, app=None):
                 for r in rel_opts.get_all_related_many_to_many_objects():
                     if r.field is not f:
                         if r.get_accessor_name() == rel_name:
-                            e.add(opts, "Accessor for m2m field '%s' clashes with related m2m field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.get_accessor_name(), f.name))
+                            e.add(opts, "Accessor for m2m field '%s' clashes with accessor for m2m field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, r.model._meta.object_name, r.field.name, f.name))
                         if r.get_accessor_name() == rel_query_name:
-                            e.add(opts, "Reverse query name for m2m field '%s' clashes with related m2m field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.get_accessor_name(), f.name))
+                            e.add(opts, "Reverse query name for m2m field '%s' clashes with accessor for m2m field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, r.model._meta.object_name, r.field.name, f.name))
                 for r in rel_opts.get_all_related_objects():
                     if r.get_accessor_name() == rel_name:
-                        e.add(opts, "Accessor for m2m field '%s' clashes with related field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.get_accessor_name(), f.name))
+                        e.add(opts, "Accessor for m2m field '%s' clashes with accessor for field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, r.model._meta.object_name, r.field.name, f.name))
                     if r.get_accessor_name() == rel_query_name:
-                        e.add(opts, "Reverse query name for m2m field '%s' clashes with related field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, rel_opts.object_name, r.get_accessor_name(), f.name))
+                        e.add(opts, "Reverse query name for m2m field '%s' clashes with accessor for field '%s.%s'. Add a related_name argument to the definition for '%s'." % (f.name, r.model._meta.object_name, r.field.name, f.name))
 
         # Check ordering attribute.
         if opts.ordering:

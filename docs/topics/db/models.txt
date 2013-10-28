@@ -4,9 +4,9 @@ Models
 
 .. module:: django.db.models
 
-A model is the single, definitive source of data about your data. It contains
-the essential fields and behaviors of the data you're storing. Generally, each
-model maps to a single database table.
+A model is the single, definitive source of information about your data. It
+contains the essential fields and behaviors of the data you're storing.
+Generally, each model maps to a single database table.
 
 The basics:
 
@@ -48,7 +48,7 @@ Some technical notes:
 
 * The name of the table, ``myapp_person``, is automatically derived from
   some model metadata but can be overridden. See :ref:`table-names` for more
-  details..
+  details.
 
 * An ``id`` field is added automatically, but this behavior can be
   overridden. See :ref:`automatic-primary-key-fields`.
@@ -77,7 +77,8 @@ application by the :djadmin:`manage.py startapp <startapp>` script),
     )
 
 When you add new apps to :setting:`INSTALLED_APPS`, be sure to run
-:djadmin:`manage.py syncdb <syncdb>`.
+:djadmin:`manage.py migrate <migrate>`, optionally making migrations
+for them first with :djadmin:`manage.py makemigrations <makemigrations>`.
 
 Fields
 ======
@@ -112,7 +113,7 @@ determine a few things:
 
 * The database column type (e.g. ``INTEGER``, ``VARCHAR``).
 
-* The default :doc:`widget </ref/forms/widgets>` to use when rendering a form
+* The default HTML :doc:`widget </ref/forms/widgets>` to use when rendering a form
   field (e.g. ``<input type="text">``, ``<select>``).
 
 * The minimal validation requirements, used in Django's admin and in
@@ -182,7 +183,7 @@ ones:
                 ('L', 'Large'),
             )
             name = models.CharField(max_length=60)
-            shirt_size = models.CharField(max_length=2, choices=SHIRT_SIZES)
+            shirt_size = models.CharField(max_length=1, choices=SHIRT_SIZES)
 
     ::
 
@@ -236,7 +237,7 @@ sees you've explicitly set :attr:`Field.primary_key`, it won't add the automatic
 ``id`` column.
 
 Each model requires exactly one field to have :attr:`primary_key=True
-<Field.primary_key>`.
+<Field.primary_key>` (either explicitly declared or automatically added).
 
 .. _verbose-field-names:
 
@@ -416,6 +417,7 @@ something like this::
     class Person(models.Model):
         name = models.CharField(max_length=128)
 
+        # On Python 3: def __str__(self):
         def __unicode__(self):
             return self.name
 
@@ -423,6 +425,7 @@ something like this::
         name = models.CharField(max_length=128)
         members = models.ManyToManyField(Person, through='Membership')
 
+        # On Python 3: def __str__(self):
         def __unicode__(self):
             return self.name
 
@@ -709,7 +712,10 @@ of :ref:`methods automatically given to each model <model-instance-methods>`.
 You can override most of these -- see `overriding predefined model methods`_,
 below -- but there are a couple that you'll almost always want to define:
 
-:meth:`~Model.__unicode__`
+:meth:`~Model.__str__` (Python 3)
+    Python 3 equivalent of ``__unicode__()``.
+
+:meth:`~Model.__unicode__` (Python 2)
     A Python "magic method" that returns a unicode "representation" of any
     object. This is what Python and Django will use whenever a model
     instance needs to be coerced and displayed as a plain string. Most
@@ -951,7 +957,7 @@ The reverse name of the ``common.ChildA.m2m`` field will be
 reverse name of the ``rare.ChildB.m2m`` field will be ``rare_childb_related``.
 It is up to you how you use the ``'%(class)s'`` and ``'%(app_label)s`` portion
 to construct your related name, but if you forget to use it, Django will raise
-errors when you validate your models (or run :djadmin:`syncdb`).
+errors when you validate your models (or run :djadmin:`migrate`).
 
 If you don't specify a :attr:`~django.db.models.ForeignKey.related_name`
 attribute for a field in an abstract base class, the default reverse name will
@@ -1044,7 +1050,7 @@ are putting those types of relations on a subclass of another model,
 you **must** specify the
 :attr:`~django.db.models.ForeignKey.related_name` attribute on each
 such field. If you forget, Django will raise an error when you run
-:djadmin:`validate` or :djadmin:`syncdb`.
+:djadmin:`validate` or :djadmin:`migrate`.
 
 For example, using the above ``Place`` class again, let's create another
 subclass with a :class:`~django.db.models.ManyToManyField`::

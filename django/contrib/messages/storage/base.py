@@ -34,7 +34,7 @@ class Message(object):
 
     def __eq__(self, other):
         return isinstance(other, Message) and self.level == other.level and \
-                                              self.message == other.message
+            self.message == other.message
 
     def __str__(self):
         return force_text(self.message)
@@ -105,7 +105,7 @@ class BaseStorage(object):
         just containing no messages) then ``None`` should be returned in
         place of ``messages``.
         """
-        raise NotImplementedError()
+        raise NotImplementedError('subclasses of BaseStorage must provide a _get() method')
 
     def _store(self, messages, response, *args, **kwargs):
         """
@@ -116,7 +116,7 @@ class BaseStorage(object):
 
         **This method must be implemented by a subclass.**
         """
-        raise NotImplementedError()
+        raise NotImplementedError('subclasses of BaseStorage must provide a _store() method')
 
     def _prepare_messages(self, messages):
         """

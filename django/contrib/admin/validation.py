@@ -1,9 +1,8 @@
 from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.db.models.fields import FieldDoesNotExist
-from django.forms.models import (BaseModelForm, BaseModelFormSet, fields_for_model,
-    _get_foreign_key)
-from django.contrib.admin.util import get_fields_from_path, NotRelationField
+from django.forms.models import BaseModelForm, BaseModelFormSet, _get_foreign_key
+from django.contrib.admin.utils import get_fields_from_path, NotRelationField
 
 """
 Does basic ModelAdmin option validation. Calls custom validation
@@ -258,8 +257,10 @@ class ModelAdminValidator(BaseValidator):
                                     % (cls.__name__, idx, field))
 
     def validate_list_display_links(self, cls, model):
-        " Validate that list_display_links is a unique subset of list_display. "
+        " Validate that list_display_links either is None or a unique subset of list_display."
         if hasattr(cls, 'list_display_links'):
+            if cls.list_display_links is None:
+                return
             check_isseq(cls, 'list_display_links', cls.list_display_links)
             for idx, field in enumerate(cls.list_display_links):
                 if field not in cls.list_display:
@@ -310,8 +311,14 @@ class ModelAdminValidator(BaseValidator):
                                 % (cls.__name__, idx, field))
 
     def validate_list_select_related(self, cls, model):
-        " Validate that list_select_related is a boolean. "
-        check_type(cls, 'list_select_related', bool)
+        " Validate that list_select_related is a boolean, a list or a tuple. "
+        list_select_related = getattr(cls, 'list_select_related', None)
+        if list_select_related:
+            types = (bool, tuple, list)
+            if not isinstance(list_select_related, types):
+                raise ImproperlyConfigured("'%s.list_select_related' should be "
+                                           "either a bool, a tuple or a list" %
+                                           cls.__name__)
 
     def validate_list_per_page(self, cls, model):
         " Validate that list_per_page is an integer. "
@@ -339,15 +346,16 @@ class ModelAdminValidator(BaseValidator):
                     raise ImproperlyConfigured("'%s.list_editable[%d]' refers to "
                         "'%s' which is not defined in 'list_display'."
                         % (cls.__name__, idx, field_name))
-                if field_name in cls.list_display_links:
-                    raise ImproperlyConfigured("'%s' cannot be in both '%s.list_editable'"
-                        " and '%s.list_display_links'"
-                        % (field_name, cls.__name__, cls.__name__))
-                if not cls.list_display_links and cls.list_display[0] in cls.list_editable:
-                    raise ImproperlyConfigured("'%s.list_editable[%d]' refers to"
-                        " the first field in list_display, '%s', which can't be"
-                        " used unless list_display_links is set."
-                        % (cls.__name__, idx, cls.list_display[0]))
+                if cls.list_display_links is not None:
+                    if field_name in cls.list_display_links:
+                        raise ImproperlyConfigured("'%s' cannot be in both '%s.list_editable'"
+                            " and '%s.list_display_links'"
+                            % (field_name, cls.__name__, cls.__name__))
+                    if not cls.list_display_links and cls.list_display[0] in cls.list_editable:
+                        raise ImproperlyConfigured("'%s.list_editable[%d]' refers to"
+                            " the first field in list_display, '%s', which can't be"
+                            " used unless list_display_links is set."
+                            % (cls.__name__, idx, cls.list_display[0]))
                 if not field.editable:
                     raise ImproperlyConfigured("'%s.list_editable[%d]' refers to a "
                         "field, '%s', which isn't editable through the admin."
@@ -395,7 +403,7 @@ class InlineValidator(BaseValidator):
 def check_type(cls, attr, type_):
     if getattr(cls, attr, None) is not None and not isinstance(getattr(cls, attr), type_):
         raise ImproperlyConfigured("'%s.%s' should be a %s."
-                % (cls.__name__, attr, type_.__name__ ))
+                % (cls.__name__, attr, type_.__name__))
 
 def check_isseq(cls, label, obj):
     if not isinstance(obj, (list, tuple)):

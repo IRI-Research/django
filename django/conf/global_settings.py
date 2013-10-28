@@ -184,6 +184,7 @@ EMAIL_PORT = 25
 EMAIL_HOST_USER = ''
 EMAIL_HOST_PASSWORD = ''
 EMAIL_USE_TLS = False
+EMAIL_USE_SSL = False
 
 # List of strings representing installed apps.
 INSTALLED_APPS = ()
@@ -197,7 +198,7 @@ TEMPLATE_DIRS = ()
 TEMPLATE_LOADERS = (
     'django.template.loaders.filesystem.Loader',
     'django.template.loaders.app_directories.Loader',
-#     'django.template.loaders.eggs.Loader',
+    # 'django.template.loaders.eggs.Loader',
 )
 
 # List of processors used by RequestContext to populate the context.
@@ -210,7 +211,7 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     'django.core.context_processors.media',
     'django.core.context_processors.static',
     'django.core.context_processors.tz',
-#    'django.core.context_processors.request',
+    # 'django.core.context_processors.request',
     'django.contrib.messages.context_processors.messages',
 )
 
@@ -311,6 +312,11 @@ FILE_UPLOAD_TEMP_DIR = None
 # The numeric mode to set newly-uploaded files to. The value should be a mode
 # you'd pass directly to os.chmod; see http://docs.python.org/lib/os-file-dir.html.
 FILE_UPLOAD_PERMISSIONS = None
+
+# The numeric mode to assign to newly-created directories, when uploading files.
+# The value should be a mode as you'd pass to os.chmod;
+# see http://docs.python.org/lib/os-file-dir.html.
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = None
 
 # Python module path where user will place custom format definition.
 # The directory where this setting is pointing should contain subdirectories
@@ -450,8 +456,8 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-#     'django.middleware.http.ConditionalGetMiddleware',
-#     'django.middleware.gzip.GZipMiddleware',
+    # 'django.middleware.http.ConditionalGetMiddleware',
+    # 'django.middleware.gzip.GZipMiddleware',
 )
 
 ############
@@ -469,6 +475,7 @@ SESSION_SAVE_EVERY_REQUEST = False                      # Whether to save the se
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False                 # Whether a user's session cookie expires when the Web browser is closed.
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # The module to store session data
 SESSION_FILE_PATH = None                                # Directory to store session files if using the file session module. If None, the backend will use a sensible default.
+SESSION_SERIALIZER = 'django.contrib.sessions.serializers.JSONSerializer'  # class to serialize session data
 
 #########
 # CACHE #
@@ -562,7 +569,7 @@ MESSAGE_STORAGE = 'django.contrib.messages.storage.fallback.FallbackStorage'
 ###########
 
 # The callable to use to configure logging
-LOGGING_CONFIG = 'django.utils.log.dictConfig'
+LOGGING_CONFIG = 'logging.config.dictConfig'
 
 # Custom logging configuration.
 LOGGING = {}
@@ -600,5 +607,12 @@ STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
-#    'django.contrib.staticfiles.finders.DefaultStorageFinder',
+    # 'django.contrib.staticfiles.finders.DefaultStorageFinder',
 )
+
+##############
+# MIGRATIONS #
+##############
+
+# Migration module overrides for apps, by app label.
+MIGRATION_MODULES = {}

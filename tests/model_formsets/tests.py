@@ -1,4 +1,4 @@
-from __future__ import absolute_import, unicode_literals
+from __future__ import unicode_literals
 
 import datetime
 import re
@@ -8,7 +8,7 @@ from decimal import Decimal
 from django import forms
 from django.db import models
 from django.forms.models import (_get_foreign_key, inlineformset_factory,
-    modelformset_factory)
+    modelformset_factory, BaseModelFormSet)
 from django.test import TestCase, skipUnlessDBFeature
 from django.utils import six
 
@@ -32,6 +32,9 @@ class DeletionTests(TestCase):
             'form-0-DELETE': 'on',
         }
         formset = PoetFormSet(data, queryset=Poet.objects.all())
+        formset.save(commit=False)
+        self.assertEqual(Poet.objects.count(), 1)
+
         formset.save()
         self.assertTrue(formset.is_valid())
         self.assertEqual(Poet.objects.count(), 0)
@@ -288,9 +291,9 @@ class ModelFormsetTest(TestCase):
         # all existing related objects/inlines for a given object to be
         # displayed, but not allow the creation of new inlines beyond max_num.
 
-        author1 = Author.objects.create(name='Charles Baudelaire')
-        author2 = Author.objects.create(name='Paul Verlaine')
-        author3 = Author.objects.create(name='Walt Whitman')
+        Author.objects.create(name='Charles Baudelaire')
+        Author.objects.create(name='Paul Verlaine')
+        Author.objects.create(name='Walt Whitman')
 
         qs = Author.objects.order_by('name')
 
@@ -386,6 +389,23 @@ class ModelFormsetTest(TestCase):
         formset = PostFormSet()
         self.assertFalse("subtitle" in formset.forms[0].fields)
 
+    def test_custom_queryset_init(self):
+        """
+        Test that a queryset can be overridden in the __init__ method.
+        https://docs.djangoproject.com/en/dev/topics/forms/modelforms/#changing-the-queryset
+        """
+        Author.objects.create(name='Charles Baudelaire')
+        Author.objects.create(name='Paul Verlaine')
+
+        class BaseAuthorFormSet(BaseModelFormSet):
+            def __init__(self, *args, **kwargs):
+                super(BaseAuthorFormSet, self).__init__(*args, **kwargs)
+                self.queryset = Author.objects.filter(name__startswith='Charles')
+
+        AuthorFormSet = modelformset_factory(Author, fields='__all__', formset=BaseAuthorFormSet)
+        formset = AuthorFormSet()
+        self.assertEqual(len(formset.get_queryset()), 1)
+
     def test_model_inheritance(self):
         BetterAuthorFormSet = modelformset_factory(BetterAuthor, fields="__all__")
         formset = BetterAuthorFormSet()
@@ -446,7 +466,7 @@ class ModelFormsetTest(TestCase):
         formset = AuthorBooksFormSet(instance=author)
         self.assertEqual(len(formset.forms), 3)
         self.assertHTMLEqual(formset.forms[0].as_p(),
-            '<p><label for="id_book_set-0-title">Title:</label> <input id="id_book_set-0-title" type="text" name="book_set-0-title" maxlength="100" /><input type="hidden" name="book_set-0-author" value="%d" id="id_book_set-0-author" /><input type="hidden" name="book_set-0-id" id="id_book_set-0-id" /></p>'  % author.id)
+            '<p><label for="id_book_set-0-title">Title:</label> <input id="id_book_set-0-title" type="text" name="book_set-0-title" maxlength="100" /><input type="hidden" name="book_set-0-author" value="%d" id="id_book_set-0-author" /><input type="hidden" name="book_set-0-id" id="id_book_set-0-id" /></p>' % author.id)
         self.assertHTMLEqual(formset.forms[1].as_p(),
             '<p><label for="id_book_set-1-title">Title:</label> <input id="id_book_set-1-title" type="text" name="book_set-1-title" maxlength="100" /><input type="hidden" name="book_set-1-author" value="%d" id="id_book_set-1-author" /><input type="hidden" name="book_set-1-id" id="id_book_set-1-id" /></p>' % author.id)
         self.assertHTMLEqual(formset.forms[2].as_p(),
@@ -515,7 +535,7 @@ class ModelFormsetTest(TestCase):
         # The save_as_new parameter lets you re-associate the data to a new
         # instance.  This is used in the admin for save_as functionality.
         AuthorBooksFormSet = inlineformset_factory(Author, Book, can_delete=False, extra=2, fields="__all__")
-        author = Author.objects.create(name='Charles Baudelaire')
+        Author.objects.create(name='Charles Baudelaire')
 
         data = {
             'book_set-TOTAL_FORMS': '3', # the number of forms rendered
@@ -559,7 +579,7 @@ class ModelFormsetTest(TestCase):
         formset = AuthorBooksFormSet2(instance=author)
         self.assertEqual(len(formset.forms), 1)
         self.assertHTMLEqual(formset.forms[0].as_p(),
-            '<p><label for="id_bookwithcustompk_set-0-my_pk">My pk:</label> <input id="id_bookwithcustompk_set-0-my_pk" type="number" name="bookwithcustompk_set-0-my_pk" maxlength="6" /></p>\n'
+            '<p><label for="id_bookwithcustompk_set-0-my_pk">My pk:</label> <input id="id_bookwithcustompk_set-0-my_pk" type="number" name="bookwithcustompk_set-0-my_pk" step="1" /></p>\n'
             '<p><label for="id_bookwithcustompk_set-0-title">Title:</label> <input id="id_bookwithcustompk_set-0-title" type="text" name="bookwithcustompk_set-0-title" maxlength="100" /><input type="hidden" name="bookwithcustompk_set-0-author" value="1" id="id_bookwithcustompk_set-0-author" /></p>')
 
         data = {
@@ -1055,9 +1075,11 @@ class ModelFormsetTest(TestCase):
 
         class MembershipForm(forms.ModelForm):
             date_joined = forms.SplitDateTimeField(initial=now)
+
             class Meta:
                 model = Membership
                 fields = "__all__"
+
             def __init__(self, **kwargs):
                 super(MembershipForm, self).__init__(**kwargs)
                 self.fields['date_joined'].widget = forms.SplitDateTimeWidget()
@@ -1119,7 +1141,7 @@ class ModelFormsetTest(TestCase):
         # has_changed should work with queryset and list of pk's
         # see #18898
         FormSet = modelformset_factory(AuthorMeeting, fields='__all__')
-        author = Author.objects.create(pk=1, name='Charles Baudelaire')
+        Author.objects.create(pk=1, name='Charles Baudelaire')
         data = {
             'form-TOTAL_FORMS': 1,
             'form-INITIAL_FORMS': 0,
@@ -1175,9 +1197,9 @@ class ModelFormsetTest(TestCase):
 
         FormSet = inlineformset_factory(Author, Book, extra=0, fields="__all__")
         author = Author.objects.create(pk=1, name='Charles Baudelaire')
-        book1 = Book.objects.create(pk=1, author=author, title='Les Paradis Artificiels')
-        book2 = Book.objects.create(pk=2, author=author, title='Les Fleurs du Mal')
-        book3 = Book.objects.create(pk=3, author=author, title='Flowers of Evil')
+        Book.objects.create(pk=1, author=author, title='Les Paradis Artificiels')
+        Book.objects.create(pk=2, author=author, title='Les Fleurs du Mal')
+        Book.objects.create(pk=3, author=author, title='Flowers of Evil')
 
         book_ids = author.book_set.order_by('id').values_list('id', flat=True)
         data = {
@@ -1261,7 +1283,7 @@ class ModelFormsetTest(TestCase):
             ['Please correct the duplicate data for subtitle which must be unique for the month in posted.'])
 
 
-class TestModelFormsetWidgets(TestCase):
+class TestModelFormsetOverridesTroughFormMeta(TestCase):
     def test_modelformset_factory_widgets(self):
         widgets = {
             'name': forms.TextInput(attrs={'class': 'poet'})
@@ -1283,3 +1305,53 @@ class TestModelFormsetWidgets(TestCase):
             "%s" % form['title'],
             '<input class="book" id="id_title" maxlength="100" name="title" type="text" />'
         )
+
+    def test_modelformset_factory_labels_overrides(self):
+        BookFormSet = modelformset_factory(Book, fields="__all__", labels={
+            'title': 'Name'
+        })
+        form = BookFormSet.form()
+        self.assertHTMLEqual(form['title'].label_tag(), '<label for="id_title">Name:</label>')
+
+    def test_inlineformset_factory_labels_overrides(self):
+        BookFormSet = inlineformset_factory(Author, Book, fields="__all__", labels={
+            'title': 'Name'
+        })
+        form = BookFormSet.form()
+        self.assertHTMLEqual(form['title'].label_tag(), '<label for="id_title">Name:</label>')
+
+    def test_modelformset_factory_help_text_overrides(self):
+        BookFormSet = modelformset_factory(Book, fields="__all__", help_texts={
+            'title': 'Choose carefully.'
+        })
+        form = BookFormSet.form()
+        self.assertEqual(form['title'].help_text, 'Choose carefully.')
+
+    def test_inlineformset_factory_help_text_overrides(self):
+        BookFormSet = inlineformset_factory(Author, Book, fields="__all__", help_texts={
+            'title': 'Choose carefully.'
+        })
+        form = BookFormSet.form()
+        self.assertEqual(form['title'].help_text, 'Choose carefully.')
+
+    def test_modelformset_factory_error_messages_overrides(self):
+        author = Author.objects.create(pk=1, name='Charles Baudelaire')
+        BookFormSet = modelformset_factory(Book, fields="__all__", error_messages={
+            'title': {
+                'max_length': 'Title too long!!'
+            }
+        })
+        form = BookFormSet.form(data={'title': 'Foo ' * 30, 'author': author.id})
+        form.full_clean()
+        self.assertEqual(form.errors, {'title': ['Title too long!!']})
+
+    def test_inlineformset_factory_error_messages_overrides(self):
+        author = Author.objects.create(pk=1, name='Charles Baudelaire')
+        BookFormSet = inlineformset_factory(Author, Book, fields="__all__", error_messages={
+            'title': {
+                'max_length': 'Title too long!!'
+            }
+        })
+        form = BookFormSet.form(data={'title': 'Foo ' * 30, 'author': author.id})
+        form.full_clean()
+        self.assertEqual(form.errors, {'title': ['Title too long!!']})

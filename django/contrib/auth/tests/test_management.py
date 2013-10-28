@@ -5,9 +5,10 @@ from django.contrib.auth import models, management
 from django.contrib.auth.management import create_permissions
 from django.contrib.auth.management.commands import changepassword
 from django.contrib.auth.models import User
-from django.contrib.auth.tests.test_custom_user import CustomUser
+from django.contrib.auth.tests.custom_user import CustomUser
 from django.contrib.auth.tests.utils import skipIfCustomUser
 from django.contrib.contenttypes.models import ContentType
+from django.core import exceptions
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.management.validation import get_validation_errors
@@ -174,6 +175,13 @@ class CreatesuperuserManagementCommandTestCase(TestCase):
 
 
 class CustomUserModelValidationTestCase(TestCase):
+    @override_settings(AUTH_USER_MODEL='auth.CustomUserNonListRequiredFields')
+    def test_required_fields_is_list(self):
+        "REQUIRED_FIELDS should be a list."
+        new_io = StringIO()
+        get_validation_errors(new_io, get_app('auth'))
+        self.assertIn("The REQUIRED_FIELDS must be a list or tuple.", new_io.getvalue())
+
     @override_settings(AUTH_USER_MODEL='auth.CustomUserBadRequiredFields')
     def test_username_not_in_required_fields(self):
         "USERNAME_FIELD should not appear in REQUIRED_FIELDS."
@@ -189,13 +197,17 @@ class CustomUserModelValidationTestCase(TestCase):
         self.assertIn("The USERNAME_FIELD must be unique. Add unique=True to the field parameters.", new_io.getvalue())
 
 
-class PermissionDuplicationTestCase(TestCase):
+class PermissionTestCase(TestCase):
 
     def setUp(self):
         self._original_permissions = models.Permission._meta.permissions[:]
+        self._original_default_permissions = models.Permission._meta.default_permissions
+        self._original_verbose_name = models.Permission._meta.verbose_name
 
     def tearDown(self):
         models.Permission._meta.permissions = self._original_permissions
+        models.Permission._meta.default_permissions = self._original_default_permissions
+        models.Permission._meta.verbose_name = self._original_verbose_name
         ContentType.objects.clear_cache()
 
     def test_duplicated_permissions(self):
@@ -205,7 +217,7 @@ class PermissionDuplicationTestCase(TestCase):
         """
         # check duplicated default permission
         models.Permission._meta.permissions = [
-           ('change_permission', 'Can edit permission (duplicate)')]
+            ('change_permission', 'Can edit permission (duplicate)')]
         six.assertRaisesRegex(self, CommandError,
             "The permission codename 'change_permission' clashes with a "
             "builtin permission for model 'auth.Permission'.",
@@ -228,3 +240,33 @@ class PermissionDuplicationTestCase(TestCase):
             ('other_one', 'Some other permission'),
         ]
         create_permissions(models, [], verbosity=0)
+
+    def test_default_permissions(self):
+        permission_content_type = ContentType.objects.get_by_natural_key('auth', 'permission')
+        models.Permission._meta.permissions = [
+            ('my_custom_permission', 'Some permission'),
+        ]
+        create_permissions(models, [], verbosity=0)
+
+        # add/change/delete permission by default + custom permission
+        self.assertEqual(models.Permission.objects.filter(
+            content_type=permission_content_type,
+        ).count(), 4)
+
+        models.Permission.objects.filter(content_type=permission_content_type).delete()
+        models.Permission._meta.default_permissions = []
+        create_permissions(models, [], verbosity=0)
+
+        # custom permission only since default permissions is empty
+        self.assertEqual(models.Permission.objects.filter(
+            content_type=permission_content_type,
+        ).count(), 1)
+
+    def test_verbose_name_length(self):
+        permission_content_type = ContentType.objects.get_by_natural_key('auth', 'permission')
+        models.Permission.objects.filter(content_type=permission_content_type).delete()
+        models.Permission._meta.verbose_name = "some ridiculously long verbose name that is out of control"
+
+        six.assertRaisesRegex(self, exceptions.ValidationError,
+            "The verbose_name of permission is longer than 39 characters",
+            create_permissions, models, [], verbosity=0)
