@@ -3,8 +3,8 @@ from __future__ import unicode_literals
 import datetime
 
 from django.core.exceptions import ImproperlyConfigured
-from django.test import TestCase, skipUnlessDBFeature
-from django.test.utils import override_settings, requires_tz_support
+from django.test import TestCase, override_settings, skipUnlessDBFeature
+from django.test.utils import requires_tz_support
 from django.utils import timezone
 
 from .models import Book, BookSigning
@@ -15,8 +15,9 @@ def _make_books(n, base_date):
         Book.objects.create(
             name='Book %d' % i,
             slug='book-%d' % i,
-            pages=100+i,
+            pages=100 + i,
             pubdate=base_date - datetime.timedelta(days=i))
+
 
 class ArchiveIndexViewTests(TestCase):
     fixtures = ['generic-views-test-data.json']

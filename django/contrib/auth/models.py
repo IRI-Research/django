@@ -1,5 +1,4 @@
 from __future__ import unicode_literals
-import re
 
 from django.core.mail import send_mail
 from django.core import validators
@@ -359,8 +358,8 @@ class AbstractUser(AbstractBaseUser, PermissionsMixin):
     Username, password and email are required. Other fields are optional.
     """
     username = models.CharField(_('username'), max_length=30, unique=True,
-        help_text=_('Required. 30 characters or fewer. Letters, numbers and '
-                    '@/./+/-/_ characters'),
+        help_text=_('Required. 30 characters or fewer. Letters, digits and '
+                    '@/./+/-/_ only.'),
         validators=[
             validators.RegexValidator(r'^[\w.@+-]+$', _('Enter a valid username.'), 'invalid')
         ])

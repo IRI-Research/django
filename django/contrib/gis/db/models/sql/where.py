@@ -4,6 +4,7 @@ from django.db.models.sql.expressions import SQLEvaluator
 from django.db.models.sql.where import Constraint, WhereNode
 from django.contrib.gis.db.models.fields import GeometryField
 
+
 class GeoConstraint(Constraint):
     """
     This subclass overrides `process` to better handle geographic SQL
@@ -27,6 +28,7 @@ class GeoConstraint(Constraint):
         params = self.field.get_db_prep_lookup(lookup_type, value, connection=connection)
         return (self.alias, self.col, db_type), params
 
+
 class GeoWhereNode(WhereNode):
     """
     Used to represent the SQL where-clause for spatial databases --
@@ -37,7 +39,7 @@ class GeoWhereNode(WhereNode):
         if isinstance(data, (list, tuple)):
             obj, lookup_type, value = data
             if (isinstance(obj, Constraint) and
-                isinstance(obj.field, GeometryField)):
+                    isinstance(obj.field, GeometryField)):
                 data = (GeoConstraint(obj), lookup_type, value)
         return super(GeoWhereNode, self)._prepare_data(data)
 

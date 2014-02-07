@@ -45,6 +45,29 @@ class ModelMultipleChoiceFieldTests(TestCase):
         f.clean([p.pk for p in Person.objects.all()[8:9]])
         self.assertTrue(self._validator_run)
 
+    def test_model_multiple_choice_show_hidden_initial(self):
+        """
+        Test support of show_hidden_initial by ModelMultipleChoiceField.
+        """
+        class PersonForm(forms.Form):
+            persons = forms.ModelMultipleChoiceField(show_hidden_initial=True,
+                                                     queryset=Person.objects.all())
+
+        person1 = Person.objects.create(name="Person 1")
+        person2 = Person.objects.create(name="Person 2")
+
+        form = PersonForm(initial={'persons': [person1, person2]},
+                          data={'initial-persons': [str(person1.pk), str(person2.pk)],
+                                'persons': [str(person1.pk), str(person2.pk)]})
+        self.assertTrue(form.is_valid())
+        self.assertFalse(form.has_changed())
+
+        form = PersonForm(initial={'persons': [person1, person2]},
+                          data={'initial-persons': [str(person1.pk), str(person2.pk)],
+                                'persons': [str(person2.pk)]})
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.has_changed())
+
 
 class TripleForm(forms.ModelForm):
     class Meta:
@@ -105,6 +128,7 @@ class FullyLocalizedTripleForm(forms.ModelForm):
         model = Triple
         localized_fields = '__all__'
         fields = '__all__'
+
 
 class LocalizedModelFormTest(TestCase):
     def test_model_form_applies_localize_to_some_fields(self):
@@ -167,6 +191,7 @@ class FilePathFieldTests(TestCase):
         names.sort()
         self.assertEqual(names, ['---------', '__init__.py', 'models.py', 'tests.py'])
 
+
 class ManyToManyCallableInitialTests(TestCase):
     def test_callable(self):
         "Regression for #10349: A callable can be provided as the initial value for an m2m field"
@@ -207,8 +232,9 @@ class CustomFieldSaveTests(TestCase):
 
         # It's enough that the form saves without error -- the custom save routine will
         # generate an AssertionError if it is called more than once during save.
-        form = CFFForm(data = {'f': None})
+        form = CFFForm(data={'f': None})
         form.save()
+
 
 class ModelChoiceIteratorTests(TestCase):
     def test_len(self):
@@ -236,11 +262,13 @@ class CustomModelFormSaveMethod(TestCase):
         self.assertEqual(form.is_valid(), False)
         self.assertEqual(form.errors['__all__'], ['Please specify a real name.'])
 
+
 class ModelClassTests(TestCase):
     def test_no_model_class(self):
         class NoModelModelForm(forms.ModelForm):
             pass
         self.assertRaises(ValueError, NoModelModelForm)
+
 
 class OneToOneFieldTests(TestCase):
     def test_assignment_of_none(self):

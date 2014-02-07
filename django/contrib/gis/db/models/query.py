@@ -50,7 +50,7 @@ class GeoQuerySet(QuerySet):
         if backend.oracle:
             s['procedure_fmt'] = '%(geo_col)s,%(tolerance)s'
             s['procedure_args']['tolerance'] = tolerance
-            s['select_field'] = AreaField('sq_m') # Oracle returns area in units of meters.
+            s['select_field'] = AreaField('sq_m')  # Oracle returns area in units of meters.
         elif backend.postgis or backend.spatialite:
             if backend.geography:
                 # Geography fields support area calculation, returns square meters.
@@ -362,12 +362,14 @@ class GeoQuerySet(QuerySet):
         relative = int(bool(relative))
         if not isinstance(precision, six.integer_types):
             raise TypeError('SVG precision keyword argument must be an integer.')
-        s = {'desc': 'SVG',
-             'procedure_fmt': '%(geo_col)s,%(rel)s,%(precision)s',
-             'procedure_args': {'rel': relative,
-                                 'precision': precision,
-                                 }
-             }
+        s = {
+            'desc': 'SVG',
+            'procedure_fmt': '%(geo_col)s,%(rel)s,%(precision)s',
+            'procedure_args': {
+                'rel': relative,
+                'precision': precision,
+            }
+        }
         return self._spatial_attribute('svg', s, **kwargs)
 
     def sym_difference(self, geom, **kwargs):
@@ -420,7 +422,7 @@ class GeoQuerySet(QuerySet):
         custom_sel = '%s(%s, %s)' % (connections[self.db].ops.transform, geo_col, srid)
         # TODO: Should we have this as an alias?
         # custom_sel = '(%s(%s, %s)) AS %s' % (SpatialBackend.transform, geo_col, srid, qn(geo_field.name))
-        self.query.transformed_srid = srid # So other GeoQuerySet methods
+        self.query.transformed_srid = srid  # So other GeoQuerySet methods
         self.query.custom_select[geo_field] = custom_sel
         return self._clone()
 
@@ -644,7 +646,7 @@ class GeoQuerySet(QuerySet):
             # been transformed via the `transform` GeoQuerySet method.
             if self.query.transformed_srid:
                 u, unit_name, s = get_srid_info(self.query.transformed_srid, connection)
-                geodetic = unit_name in geo_field.geodetic_units
+                geodetic = unit_name.lower() in geo_field.geodetic_units
 
             if backend.spatialite and geodetic:
                 raise ValueError('SQLite does not support linear distance calculations on geodetic coordinate systems.')
@@ -746,11 +748,12 @@ class GeoQuerySet(QuerySet):
         for geometry set-like operations (e.g., intersection, difference,
         union, sym_difference).
         """
-        s = {'geom_args': ('geom',),
-             'select_field': GeomField(),
-             'procedure_fmt': '%(geo_col)s,%(geom)s',
-             'procedure_args': {'geom': geom},
-            }
+        s = {
+            'geom_args': ('geom',),
+            'select_field': GeomField(),
+            'procedure_fmt': '%(geo_col)s,%(geom)s',
+            'procedure_args': {'geom': geom},
+        }
         if connections[self.db].ops.oracle:
             s['procedure_fmt'] += ',%(tolerance)s'
             s['procedure_args']['tolerance'] = tolerance
@@ -782,6 +785,7 @@ class GeoQuerySet(QuerySet):
         else:
             return self.query.get_compiler(self.db)._field_column(geo_field)
 
+
 class GeoValuesQuerySet(ValuesQuerySet):
     def __init__(self, *args, **kwargs):
         super(GeoValuesQuerySet, self).__init__(*args, **kwargs)
@@ -789,6 +793,7 @@ class GeoValuesQuerySet(ValuesQuerySet):
         # `convert_values`.  This ensures that Geometry objects instead
         # of string values are returned with `values()` or `values_list()`.
         self.query.geo_values = True
+
 
 class GeoValuesListQuerySet(GeoValuesQuerySet, ValuesListQuerySet):
     pass

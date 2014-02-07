@@ -9,7 +9,7 @@ from django.contrib.gis.geometry.backend import Geometry
 from django.contrib.gis.measure import Distance
 from django.core.exceptions import ImproperlyConfigured
 from django.db.backends.postgresql_psycopg2.base import DatabaseOperations
-from django.db.utils import DatabaseError
+from django.db.utils import ProgrammingError
 from django.utils import six
 from django.utils.functional import cached_property
 
@@ -22,14 +22,17 @@ class PostGISOperator(SpatialOperation):
     def __init__(self, operator):
         super(PostGISOperator, self).__init__(operator=operator)
 
+
 class PostGISFunction(SpatialFunction):
     "For PostGIS function calls (e.g., `ST_Contains(table, geom)`)."
     def __init__(self, prefix, function, **kwargs):
         super(PostGISFunction, self).__init__(prefix + function, **kwargs)
 
+
 class PostGISFunctionParam(PostGISFunction):
     "For PostGIS functions that take another parameter (e.g. DWithin, Relate)."
     sql_template = '%(function)s(%(geo_col)s, %(geometry)s, %%s)'
+
 
 class PostGISDistance(PostGISFunction):
     "For PostGIS distance operations."
@@ -39,6 +42,7 @@ class PostGISDistance(PostGISFunction):
     def __init__(self, prefix, operator):
         super(PostGISDistance, self).__init__(prefix, self.dist_func,
                                               operator=operator)
+
 
 class PostGISSpheroidDistance(PostGISFunction):
     "For PostGIS spherical distance operations (using the spheroid)."
@@ -50,9 +54,11 @@ class PostGISSpheroidDistance(PostGISFunction):
         super(PostGISSpheroidDistance, self).__init__(prefix, self.dist_func,
                                                       operator=operator)
 
+
 class PostGISSphereDistance(PostGISDistance):
     "For PostGIS spherical distance operations."
     dist_func = 'distance_sphere'
+
 
 class PostGISRelate(PostGISFunctionParam):
     "For PostGIS Relate(<geom>, <pattern>) calls."
@@ -73,7 +79,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
     valid_aggregates = {'Collect', 'Extent', 'Extent3D', 'MakeLine', 'Union'}
 
     Adapter = PostGISAdapter
-    Adaptor = Adapter # Backwards-compatibility alias.
+    Adaptor = Adapter  # Backwards-compatibility alias.
 
     def __init__(self, connection):
         super(PostGISOperations, self).__init__(connection)
@@ -252,7 +258,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
         else:
             try:
                 vtup = self.postgis_version_tuple()
-            except DatabaseError:
+            except ProgrammingError:
                 raise ImproperlyConfigured(
                     'Cannot determine PostGIS version for database "%s". '
                     'GeoDjango requires at least PostGIS version 1.3. '
@@ -363,7 +369,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
             dist_param = value
 
         if (not geography and geodetic and lookup_type != 'dwithin'
-            and option == 'spheroid'):
+                and option == 'spheroid'):
             # using distance_spheroid requires the spheroid of the field as
             # a parameter.
             return [f._spheroid, dist_param]
@@ -461,7 +467,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
         def two_to_three(np):
             return np >= 2 and np <= 3
         if (lookup_type in self.distance_functions and
-            lookup_type != 'dwithin'):
+                lookup_type != 'dwithin'):
             return two_to_three(num_param)
         else:
             return exactly_two(num_param)
@@ -472,10 +478,7 @@ class PostGISOperations(DatabaseOperations, BaseSpatialOperations):
         (alias, col, db_type), the lookup type string, lookup value, and
         the geometry field.
         """
-        alias, col, db_type = lvalue
-
-        # Getting the quoted geometry column.
-        geo_col = '%s.%s' % (qn(alias), qn(col))
+        geo_col, db_type = lvalue
 
         if lookup_type in self.geometry_operators:
             if field.geography and not lookup_type in self.geography_operators:

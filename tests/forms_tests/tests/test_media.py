@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 from django.forms import Media, TextInput, CharField, Form, MultiWidget
 from django.template import Template, Context
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings
 
 
 @override_settings(
@@ -133,7 +132,7 @@ class FormsMediaTestCase(TestCase):
         # Widget media can be defined as a property
         class MyWidget4(TextInput):
             def _media(self):
-                return Media(css={'all': ('/some/path',)}, js = ('/some/js',))
+                return Media(css={'all': ('/some/path',)}, js=('/some/js',))
             media = property(_media)
 
         w4 = MyWidget4()
@@ -143,7 +142,7 @@ class FormsMediaTestCase(TestCase):
         # Media properties can reference the media of their parents
         class MyWidget5(MyWidget4):
             def _media(self):
-                return super(MyWidget5, self).media + Media(css={'all': ('/other/path',)}, js = ('/other/js',))
+                return super(MyWidget5, self).media + Media(css={'all': ('/other/path',)}, js=('/other/js',))
             media = property(_media)
 
         w5 = MyWidget5()
@@ -164,7 +163,7 @@ class FormsMediaTestCase(TestCase):
 
         class MyWidget6(MyWidget1):
             def _media(self):
-                return super(MyWidget6, self).media + Media(css={'all': ('/other/path',)}, js = ('/other/js',))
+                return super(MyWidget6, self).media + Media(css={'all': ('/other/path',)}, js=('/other/js',))
             media = property(_media)
 
         w6 = MyWidget6()
@@ -228,7 +227,7 @@ class FormsMediaTestCase(TestCase):
 
         class MyWidget4(TextInput):
             def _media(self):
-                return Media(css={'all': ('/some/path',)}, js = ('/some/js',))
+                return Media(css={'all': ('/some/path',)}, js=('/some/js',))
             media = property(_media)
 
         class MyWidget9(MyWidget4):
@@ -585,7 +584,7 @@ class StaticFormsMediaTestCase(TestCase):
         # Widget media can be defined as a property
         class MyWidget4(TextInput):
             def _media(self):
-                return Media(css={'all': ('/some/path',)}, js = ('/some/js',))
+                return Media(css={'all': ('/some/path',)}, js=('/some/js',))
             media = property(_media)
 
         w4 = MyWidget4()
@@ -595,7 +594,7 @@ class StaticFormsMediaTestCase(TestCase):
         # Media properties can reference the media of their parents
         class MyWidget5(MyWidget4):
             def _media(self):
-                return super(MyWidget5, self).media + Media(css={'all': ('/other/path',)}, js = ('/other/js',))
+                return super(MyWidget5, self).media + Media(css={'all': ('/other/path',)}, js=('/other/js',))
             media = property(_media)
 
         w5 = MyWidget5()
@@ -616,7 +615,7 @@ class StaticFormsMediaTestCase(TestCase):
 
         class MyWidget6(MyWidget1):
             def _media(self):
-                return super(MyWidget6, self).media + Media(css={'all': ('/other/path',)}, js = ('/other/js',))
+                return super(MyWidget6, self).media + Media(css={'all': ('/other/path',)}, js=('/other/js',))
             media = property(_media)
 
         w6 = MyWidget6()
@@ -680,7 +679,7 @@ class StaticFormsMediaTestCase(TestCase):
 
         class MyWidget4(TextInput):
             def _media(self):
-                return Media(css={'all': ('/some/path',)}, js = ('/some/js',))
+                return Media(css={'all': ('/some/path',)}, js=('/some/js',))
             media = property(_media)
 
         class MyWidget9(MyWidget4):

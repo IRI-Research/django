@@ -47,7 +47,7 @@ Specifying authentication backends
 Behind the scenes, Django maintains a list of "authentication backends" that it
 checks for authentication. When somebody calls
 :func:`django.contrib.auth.authenticate()` -- as described in :ref:`How to log
-a user in <how-to-log-a-user-in>` above -- Django tries authenticating across
+a user in <how-to-log-a-user-in>` -- Django tries authenticating across
 all of its authentication backends. If the first authentication method fails,
 Django tries the second one, and so on, until all backends have been attempted.
 
@@ -276,7 +276,7 @@ can or cannot do with Task instances, specific to your application::
 
 The only thing this does is create those extra permissions when you run
 :djadmin:`manage.py migrate <migrate>`. Your code is in charge of checking the
-value of these permissions when an user is trying to access the functionality
+value of these permissions when a user is trying to access the functionality
 provided by the application (viewing tasks, changing the status of tasks,
 closing tasks.) Continuing the above example, the following checks if a user may
 view tasks::
@@ -413,6 +413,19 @@ different User model.
         class Article(models.Model):
             author = models.ForeignKey(settings.AUTH_USER_MODEL)
 
+    .. versionadded:: 1.7
+
+        When connecting to signals sent by the User model, you should specify the
+        custom model using the :setting:`AUTH_USER_MODEL` setting. For example::
+
+            from django.conf import settings
+            from django.db.models.signals import post_save
+
+            def post_save_receiver(signal, sender, instance, **kwargs):
+                pass
+
+            post_save.connect(post_save_receiver, sender=settings.AUTH_USER_MODEL)
+
 Specifying a custom User model
 ------------------------------
 
@@ -464,7 +477,7 @@ password resets. You must then provide some key implementation details:
         as the identifying field::
 
             class MyUser(AbstractBaseUser):
-                identifier = models.CharField(max_length=40, unique=True, db_index=True)
+                identifier = models.CharField(max_length=40, unique=True)
                 ...
                 USERNAME_FIELD = 'identifier'
 
@@ -492,8 +505,9 @@ password resets. You must then provide some key implementation details:
 
         .. note::
 
-            ``REQUIRED_FIELDS`` must contain all required fields on your User
-            model, but should *not* contain the ``USERNAME_FIELD``.
+            ``REQUIRED_FIELDS`` must contain all required fields on your
+            ``User`` model, but should *not* contain the ``USERNAME_FIELD`` or
+            ``password`` as these fields will always be prompted for.
 
     .. attribute:: is_active
 
@@ -952,7 +966,6 @@ authentication app::
             verbose_name='email address',
             max_length=255,
             unique=True,
-            db_index=True,
         )
         date_of_birth = models.DateField()
         is_active = models.BooleanField(default=True)

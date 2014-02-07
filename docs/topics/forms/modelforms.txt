@@ -528,7 +528,7 @@ field, you could do the following::
 
         class Meta:
             model = Article
-            fields = ['pub_date', 'headline', 'content', 'reporter']
+            fields = ['pub_date', 'headline', 'content', 'reporter', 'slug']
 
 
 If you want to specify a field's validators, you can do so by defining
@@ -760,6 +760,30 @@ instances of the model, you can specify an empty QuerySet::
 
    >>> AuthorFormSet(queryset=Author.objects.none())
 
+Changing the ``form``
+---------------------
+
+By default, when you use ``modelformset_factory``, a model form will
+be created using :func:`~django.forms.models.modelform_factory`.
+Often, it can be useful to specify a custom model form. For example,
+you can create a custom model form that has custom validation::
+
+    class AuthorForm(forms.ModelForm):
+        class Meta:
+            model = Author
+            fields = ('name', 'title')
+
+        def clean_name(self):
+            # custom validation for the name field
+            ...
+
+Then, pass your model form to the factory function::
+
+    AuthorFormSet = modelformset_factory(Author, form=AuthorForm)
+
+It is not always necessary to define a custom model form. The
+``modelformset_factory`` function has several arguments which are
+passed through to ``modelform_factory``, which are described below.
 
 .. _controlling-fields-with-fields-and-exclude:
 
@@ -942,6 +966,24 @@ class's ``clean`` method::
             for form in self.forms:
                 # your custom formset validation
                 ...
+
+Also note that by the time you reach this step, individual model instances
+have already been created for each ``Form``. Modifying a value in
+``form.cleaned_data`` is not sufficient to affect the saved value. If you wish
+to modify a value in ``ModelFormSet.clean()`` you must modify
+``form.instance``::
+
+    from django.forms.models import BaseModelFormSet
+
+    class MyModelFormSet(BaseModelFormSet):
+        def clean(self):
+            super(MyModelFormSet, self).clean()
+
+            for form in self.forms:
+                name = form.cleaned_data['name'].upper()
+                form.cleaned_data['name'] = name
+                # update the instance value.
+                form.instance.name = name
 
 Using a custom queryset
 -----------------------

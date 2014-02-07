@@ -1,7 +1,7 @@
 from __future__ import unicode_literals
 
 from django import forms
-from django.contrib.contenttypes.generic import generic_inlineformset_factory
+from django.contrib.contenttypes.forms import generic_inlineformset_factory
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from django.utils import six
@@ -290,11 +290,13 @@ class GenericRelationsTests(TestCase):
 class CustomWidget(forms.TextInput):
     pass
 
+
 class TaggedItemForm(forms.ModelForm):
     class Meta:
         model = TaggedItem
         fields = '__all__'
         widgets = {'tag': CustomWidget}
+
 
 class GenericInlineFormsetTest(TestCase):
     def test_generic_inlineformset_factory(self):

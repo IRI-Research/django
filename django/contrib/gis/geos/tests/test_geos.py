@@ -22,8 +22,7 @@ from .. import HAS_GEOS
 if HAS_GEOS:
     from .. import (GEOSException, GEOSIndexError, GEOSGeometry,
         GeometryCollection, Point, MultiPoint, Polygon, MultiPolygon, LinearRing,
-        LineString, MultiLineString, fromfile, fromstr, geos_version_info,
-        GEOS_PREPARE)
+        LineString, MultiLineString, fromfile, fromstr, geos_version_info)
     from ..base import gdal, numpy, GEOSBase
 
 
@@ -121,20 +120,12 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
         # a bug in versions prior to 3.1 that puts the X coordinate in
         # place of Z; an exception should be raised on those versions.
         self.assertEqual(hexewkb_2d, pnt_2d.hexewkb)
-        if GEOS_PREPARE:
-            self.assertEqual(hexewkb_3d, pnt_3d.hexewkb)
-            self.assertEqual(True, GEOSGeometry(hexewkb_3d).hasz)
-        else:
-            with self.assertRaises(GEOSException):
-                pnt_3d.hexewkb
+        self.assertEqual(hexewkb_3d, pnt_3d.hexewkb)
+        self.assertEqual(True, GEOSGeometry(hexewkb_3d).hasz)
 
         # Same for EWKB.
         self.assertEqual(memoryview(a2b_hex(hexewkb_2d)), pnt_2d.ewkb)
-        if GEOS_PREPARE:
-            self.assertEqual(memoryview(a2b_hex(hexewkb_3d)), pnt_3d.ewkb)
-        else:
-            with self.assertRaises(GEOSException):
-                pnt_3d.ewkb
+        self.assertEqual(memoryview(a2b_hex(hexewkb_3d)), pnt_3d.ewkb)
 
         # Redundant sanity check.
         self.assertEqual(4326, GEOSGeometry(hexewkb_2d).srid)
@@ -198,7 +189,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
                 poly = fromstr(ewkt)
                 self.assertEqual(srid, poly.srid)
                 self.assertEqual(srid, poly.shell.srid)
-                self.assertEqual(srid, fromstr(poly.ewkt).srid) # Checking export
+                self.assertEqual(srid, fromstr(poly.ewkt).srid)  # Checking export
 
     @skipUnless(HAS_GDAL, "GDAL is required.")
     def test_json(self):
@@ -279,7 +270,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
             # Now testing the different constructors
             pnt2 = Point(tup_args)  # e.g., Point((1, 2))
-            pnt3 = Point(*tup_args) # e.g., Point(1, 2)
+            pnt3 = Point(*tup_args)  # e.g., Point(1, 2)
             self.assertEqual(True, pnt == pnt2)
             self.assertEqual(True, pnt == pnt3)
 
@@ -295,7 +286,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
             pnt.coords = set_tup2
             self.assertEqual(set_tup2, pnt.coords)
 
-            prev = pnt # setting the previous geometry
+            prev = pnt  # setting the previous geometry
 
     def test_multipoints(self):
         "Testing MultiPoint objects."
@@ -337,11 +328,11 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
             # Creating a LineString from a tuple, list, and numpy array
             self.assertEqual(ls, LineString(ls.tuple))  # tuple
-            self.assertEqual(ls, LineString(*ls.tuple)) # as individual arguments
-            self.assertEqual(ls, LineString([list(tup) for tup in ls.tuple])) # as list
-            self.assertEqual(ls.wkt, LineString(*tuple(Point(tup) for tup in ls.tuple)).wkt) # Point individual arguments
+            self.assertEqual(ls, LineString(*ls.tuple))  # as individual arguments
+            self.assertEqual(ls, LineString([list(tup) for tup in ls.tuple]))  # as list
+            self.assertEqual(ls.wkt, LineString(*tuple(Point(tup) for tup in ls.tuple)).wkt)  # Point individual arguments
             if numpy:
-                self.assertEqual(ls, LineString(numpy.array(ls.tuple))) # as numpy array
+                self.assertEqual(ls, LineString(numpy.array(ls.tuple)))  # as numpy array
 
     def test_multilinestring(self):
         "Testing MultiLineString objects."
@@ -409,7 +400,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
             self.assertEqual(poly.empty, False)
             self.assertEqual(poly.ring, False)
             self.assertEqual(p.n_i, poly.num_interior_rings)
-            self.assertEqual(p.n_i + 1, len(poly)) # Testing __len__
+            self.assertEqual(p.n_i + 1, len(poly))  # Testing __len__
             self.assertEqual(p.n_p, poly.num_points)
 
             # Area & Centroid
@@ -419,7 +410,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
             # Testing the geometry equivalence
             self.assertEqual(True, poly == fromstr(p.wkt))
-            self.assertEqual(False, poly == prev) # Should not be equal to previous geometry
+            self.assertEqual(False, poly == prev)  # Should not be equal to previous geometry
             self.assertEqual(True, poly != prev)
 
             # Testing the exterior ring
@@ -428,7 +419,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
             self.assertEqual(ring.geom_typeid, 2)
             if p.ext_ring_cs:
                 self.assertEqual(p.ext_ring_cs, ring.tuple)
-                self.assertEqual(p.ext_ring_cs, poly[0].tuple) # Testing __getitem__
+                self.assertEqual(p.ext_ring_cs, poly[0].tuple)  # Testing __getitem__
 
             # Testing __getitem__ and __setitem__ on invalid indices
             self.assertRaises(GEOSIndexError, poly.__getitem__, len(poly))
@@ -522,13 +513,13 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
                 poly = fromstr(p.wkt)
                 cs = poly.exterior_ring.coord_seq
 
-                self.assertEqual(p.ext_ring_cs, cs.tuple) # done in the Polygon test too.
-                self.assertEqual(len(p.ext_ring_cs), len(cs)) # Making sure __len__ works
+                self.assertEqual(p.ext_ring_cs, cs.tuple)  # done in the Polygon test too.
+                self.assertEqual(len(p.ext_ring_cs), len(cs))  # Making sure __len__ works
 
                 # Checks __getitem__ and __setitem__
                 for i in xrange(len(p.ext_ring_cs)):
-                    c1 = p.ext_ring_cs[i] # Expected value
-                    c2 = cs[i] # Value from coordseq
+                    c1 = p.ext_ring_cs[i]  # Expected value
+                    c2 = cs[i]  # Value from coordseq
                     self.assertEqual(c1, c2)
 
                     # Constructing the test value to set the coordinate sequence with
@@ -562,8 +553,8 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
             self.assertEqual(True, a.intersects(b))
             i2 = a.intersection(b)
             self.assertEqual(i1, i2)
-            self.assertEqual(i1, a & b) # __and__ is intersection operator
-            a &= b # testing __iand__
+            self.assertEqual(i1, a & b)  # __and__ is intersection operator
+            a &= b  # testing __iand__
             self.assertEqual(i1, a)
 
     def test_union(self):
@@ -574,8 +565,8 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
             u1 = fromstr(self.geometries.union_geoms[i].wkt)
             u2 = a.union(b)
             self.assertEqual(u1, u2)
-            self.assertEqual(u1, a | b) # __or__ is union operator
-            a |= b # testing __ior__
+            self.assertEqual(u1, a | b)  # __or__ is union operator
+            a |= b  # testing __ior__
             self.assertEqual(u1, a)
 
     def test_difference(self):
@@ -586,8 +577,8 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
             d1 = fromstr(self.geometries.diff_geoms[i].wkt)
             d2 = a.difference(b)
             self.assertEqual(d1, d2)
-            self.assertEqual(d1, a - b) # __sub__ is difference operator
-            a -= b # testing __isub__
+            self.assertEqual(d1, a - b)  # __sub__ is difference operator
+            a -= b  # testing __isub__
             self.assertEqual(d1, a)
 
     def test_symdifference(self):
@@ -598,8 +589,8 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
             d1 = fromstr(self.geometries.sdiff_geoms[i].wkt)
             d2 = a.sym_difference(b)
             self.assertEqual(d1, d2)
-            self.assertEqual(d1, a ^ b) # __xor__ is symmetric difference operator
-            a ^= b # testing __ixor__
+            self.assertEqual(d1, a ^ b)  # __xor__ is symmetric difference operator
+            a ^= b  # testing __ixor__
             self.assertEqual(d1, a)
 
     def test_buffer(self):
@@ -667,7 +658,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
         p2 = fromstr(p1.hex)
         self.assertEqual(exp_srid, p2.srid)
-        p3 = fromstr(p1.hex, srid=-1) # -1 is intended.
+        p3 = fromstr(p1.hex, srid=-1)  # -1 is intended.
         self.assertEqual(-1, p3.srid)
 
     @skipUnless(HAS_GDAL, "GDAL is required.")
@@ -705,7 +696,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
             # Assigning polygon's exterior ring w/the new shell
             poly.exterior_ring = new_shell
-            str(new_shell) # new shell is still accessible
+            str(new_shell)  # new shell is still accessible
             self.assertEqual(poly.exterior_ring, new_shell)
             self.assertEqual(poly[0], new_shell)
 
@@ -718,7 +709,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
                 new = Point(random.randint(21, 100), random.randint(21, 100))
                 # Testing the assignment
                 mp[i] = new
-                str(new) # what was used for the assignment is still accessible
+                str(new)  # what was used for the assignment is still accessible
                 self.assertEqual(mp[i], new)
                 self.assertEqual(mp[i].wkt, new.wkt)
                 self.assertNotEqual(pnt, mp[i])
@@ -740,7 +731,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
                 self.assertNotEqual(mpoly[i], poly)
                 # Testing the assignment
                 mpoly[i] = poly
-                str(poly) # Still accessible
+                str(poly)  # Still accessible
                 self.assertEqual(mpoly[i], poly)
                 self.assertNotEqual(mpoly[i], old_poly)
 
@@ -821,7 +812,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
             # Testing len() and num_geom.
             if isinstance(g, Polygon):
-                self.assertEqual(1, len(g)) # Has one empty linear ring
+                self.assertEqual(1, len(g))  # Has one empty linear ring
                 self.assertEqual(1, g.num_geom)
                 self.assertEqual(0, len(g[0]))
             elif isinstance(g, (Point, LineString)):
@@ -869,10 +860,9 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
         self.assertIsInstance(g1.ogr, gdal.OGRGeometry)
         self.assertIsNone(g1.srs)
 
-        if GEOS_PREPARE:
-            g1_3d = fromstr('POINT(5 23 8)')
-            self.assertIsInstance(g1_3d.ogr, gdal.OGRGeometry)
-            self.assertEqual(g1_3d.ogr.z, 8)
+        g1_3d = fromstr('POINT(5 23 8)')
+        self.assertIsInstance(g1_3d.ogr, gdal.OGRGeometry)
+        self.assertEqual(g1_3d.ogr.z, 8)
 
         g2 = fromstr('LINESTRING(0 0, 5 5, 23 23)', srid=4326)
         self.assertIsInstance(g2.ogr, gdal.OGRGeometry)
@@ -918,10 +908,7 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
     def test_transform_3d(self):
         p3d = GEOSGeometry('POINT (5 23 100)', 4326)
         p3d.transform(2774)
-        if GEOS_PREPARE:
-            self.assertEqual(p3d.z, 100)
-        else:
-            self.assertIsNone(p3d.z)
+        self.assertEqual(p3d.z, 100)
 
     @skipUnless(HAS_GDAL, "GDAL is required.")
     def test_transform_noop(self):
@@ -1030,7 +1017,6 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
                 if not no_srid:
                     self.assertEqual(geom.srid, tmpg.srid)
 
-    @skipUnless(HAS_GEOS and GEOS_PREPARE, "geos >= 3.1.0 is required")
     def test_prepared(self):
         "Testing PreparedGeometry support."
         # Creating a simple multipolygon and getting a prepared version.
@@ -1039,12 +1025,26 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
         # A set of test points.
         pnts = [Point(5, 5), Point(7.5, 7.5), Point(2.5, 7.5)]
-        covers = [True, True, False] # No `covers` op for regular GEOS geoms.
+        covers = [True, True, False]  # No `covers` op for regular GEOS geoms.
         for pnt, c in zip(pnts, covers):
             # Results should be the same (but faster)
             self.assertEqual(mpoly.contains(pnt), prep.contains(pnt))
             self.assertEqual(mpoly.intersects(pnt), prep.intersects(pnt))
             self.assertEqual(c, prep.covers(pnt))
+
+        if geos_version_info()['version'] > '3.3.0':
+            self.assertTrue(prep.crosses(fromstr('LINESTRING(1 1, 15 15)')))
+            self.assertTrue(prep.disjoint(Point(-5, -5)))
+            poly = Polygon(((-1, -1), (1, 1), (1, 0), (-1, -1)))
+            self.assertTrue(prep.overlaps(poly))
+            poly = Polygon(((-5, 0), (-5, 5), (0, 5), (-5, 0)))
+            self.assertTrue(prep.touches(poly))
+            poly = Polygon(((-1, -1), (-1, 11), (11, 11), (11, -1), (-1, -1)))
+            self.assertTrue(prep.within(poly))
+
+        # Original geometry deletion should not crash the prepared one (#21662)
+        del mpoly
+        self.assertTrue(prep.covers(Point(5, 5)))
 
     def test_line_merge(self):
         "Testing line merge support"
@@ -1057,7 +1057,6 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
         for geom, merged in zip(ref_geoms, ref_merged):
             self.assertEqual(merged, geom.merged)
 
-    @skipUnless(HAS_GEOS and GEOS_PREPARE, "geos >= 3.1.0 is required")
     def test_valid_reason(self):
         "Testing IsValidReason support"
 
@@ -1081,11 +1080,11 @@ class GEOSTest(unittest.TestCase, TestDataMixin):
 
         self.assertEqual(ls.project(Point(0, 20)), 10.0)
         self.assertEqual(ls.project(Point(7, 6)), 24)
-        self.assertEqual(ls.project_normalized(Point(0, 20)), 1.0/3)
+        self.assertEqual(ls.project_normalized(Point(0, 20)), 1.0 / 3)
 
         self.assertEqual(ls.interpolate(10), Point(0, 10))
         self.assertEqual(ls.interpolate(24), Point(10, 6))
-        self.assertEqual(ls.interpolate_normalized(1.0/3), Point(0, 10))
+        self.assertEqual(ls.interpolate_normalized(1.0 / 3), Point(0, 10))
 
         self.assertEqual(mls.project(Point(0, 20)), 10)
         self.assertEqual(mls.project(Point(7, 6)), 16)

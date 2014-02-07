@@ -74,7 +74,7 @@ class ExtraRegressTests(TestCase):
         # select portions. Applies when portions are updated or otherwise
         # moved around.
         qs = User.objects.extra(
-            select=OrderedDict((("alpha", "%s"), ("beta", "2"),  ("gamma", "%s"))),
+            select=OrderedDict((("alpha", "%s"), ("beta", "2"), ("gamma", "%s"))),
             select_params=(1, 3)
         )
         qs = qs.extra(select={"beta": 4})
@@ -91,14 +91,18 @@ class ExtraRegressTests(TestCase):
         internal dictionary must remain sorted.
         """
         self.assertEqual(
-            User.objects.extra(select={"alpha": "%s"}, select_params=(1,)
-                       ).extra(select={"beta": "%s"}, select_params=(2,))[0].alpha,
-            1)
+            (User.objects
+                .extra(select={"alpha": "%s"}, select_params=(1,))
+                .extra(select={"beta": "%s"}, select_params=(2,))[0].alpha),
+            1
+        )
 
         self.assertEqual(
-            User.objects.extra(select={"beta": "%s"}, select_params=(1,)
-                       ).extra(select={"alpha": "%s"}, select_params=(2,))[0].alpha,
-            2)
+            (User.objects
+                .extra(select={"beta": "%s"}, select_params=(1,))
+                .extra(select={"alpha": "%s"}, select_params=(2,))[0].alpha),
+            2
+        )
 
     def test_regression_7961(self):
         """
@@ -107,8 +111,10 @@ class ExtraRegressTests(TestCase):
         query as well.
         """
         self.assertEqual(
-            list(User.objects.extra(select={"alpha": "%s"}, select_params=(-6,)
-                    ).filter(id=self.u.id).values_list('id', flat=True)),
+            list(User.objects
+                .extra(select={"alpha": "%s"}, select_params=(-6,))
+                .filter(id=self.u.id)
+                .values_list('id', flat=True)),
             [self.u.id]
         )
 
@@ -129,10 +135,9 @@ class ExtraRegressTests(TestCase):
         should still be present because of the extra() call.
         """
         self.assertQuerysetEqual(
-            Order.objects.extra(where=["username=%s"],
-                                params=["fred"],
-                                tables=["auth_user"]
-            ).order_by('created_by'),
+            (Order.objects
+                .extra(where=["username=%s"], params=["fred"], tables=["auth_user"])
+                .order_by('created_by')),
             []
         )
 
@@ -347,3 +352,19 @@ class ExtraRegressTests(TestCase):
             ['<TestObject: TestObject: a,a,a>', '<TestObject: TestObject: b,a,a>'],
             ordered=False
         )
+
+    def test_extra_values_distinct_ordering(self):
+        t1 = TestObject.objects.create(first='a', second='a', third='a')
+        t2 = TestObject.objects.create(first='a', second='b', third='b')
+        qs = TestObject.objects.extra(
+            select={'second_extra': 'second'}
+        ).values_list('id', flat=True).distinct()
+        self.assertQuerysetEqual(
+            qs.order_by('second_extra'), [t1.pk, t2.pk], lambda x: x)
+        self.assertQuerysetEqual(
+            qs.order_by('-second_extra'), [t2.pk, t1.pk], lambda x: x)
+        # Note: the extra ordering must appear in select clause, so we get two
+        # non-distinct results here (this is on purpose, see #7070).
+        self.assertQuerysetEqual(
+            qs.order_by('-second_extra').values_list('first', flat=True),
+            ['a', 'a'], lambda x: x)

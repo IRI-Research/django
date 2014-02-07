@@ -1,5 +1,6 @@
 from functools import wraps
 from unittest import TestCase
+import warnings
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
@@ -44,7 +45,7 @@ full_decorator = compose(
     vary_on_cookie,
 
     # django.views.decorators.cache
-    cache_page(60*15),
+    cache_page(60 * 15),
     cache_control(private=True),
     never_cache,
 
@@ -58,12 +59,16 @@ full_decorator = compose(
     staff_member_required,
 
     # django.utils.functional
-    lambda f: memoize(f, {}, 1),
     allow_lazy,
     lazy,
 )
 
+# suppress the deprecation warning of memoize
+with warnings.catch_warnings(record=True):
+    fully_decorated = memoize(fully_decorated, {}, 1)
+
 fully_decorated = full_decorator(fully_decorated)
+
 
 class DecoratorsTest(TestCase):
 

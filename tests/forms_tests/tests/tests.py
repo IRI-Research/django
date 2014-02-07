@@ -217,6 +217,7 @@ class FormsModelTestCase(TestCase):
         self.assertEqual(obj.value, 99)
         self.assertEqual(obj.def_date, datetime.date(1999, 3, 2))
 
+
 class RelatedModelFormTests(TestCase):
     def test_invalid_loading_order(self):
         """
@@ -238,14 +239,14 @@ class RelatedModelFormTests(TestCase):
         """
         Test for issue 10405
         """
-        class A(models.Model):
-            ref = models.ForeignKey("B")
+        class C(models.Model):
+            ref = models.ForeignKey("D")
 
-        class B(models.Model):
+        class D(models.Model):
             pass
 
         class Meta:
-            model = A
+            model = C
             fields = '__all__'
 
         self.assertTrue(issubclass(ModelFormMetaclass(str('Form'), (ModelForm,), {'Meta': Meta}), ModelForm))

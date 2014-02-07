@@ -2,15 +2,14 @@
 
 from __future__ import unicode_literals
 
-import copy
 import datetime
 import os
 
 from django.core.validators import RegexValidator, EmailValidator
 from django.db import models, migrations
-from django.db.migrations.writer import MigrationWriter
-from django.db.models.loading import cache
-from django.test import TestCase, override_settings
+from django.db.migrations.writer import MigrationWriter, SettingsReference
+from django.test import TestCase
+from django.conf import settings
 from django.utils import six
 from django.utils.deconstruct import deconstructible
 from django.utils.translation import ugettext_lazy as _
@@ -39,8 +38,8 @@ class WriterTests(TestCase):
     def assertSerializedEqual(self, value):
         self.assertEqual(self.serialize_round_trip(value), value)
 
-    def assertSerializedIs(self, value):
-        self.assertIs(self.serialize_round_trip(value), value)
+    def assertSerializedResultEqual(self, value, target):
+        self.assertEqual(MigrationWriter.serialize(value), target)
 
     def assertSerializedFieldEqual(self, value):
         new_value = self.serialize_round_trip(value)
@@ -94,15 +93,44 @@ class WriterTests(TestCase):
         # Django fields
         self.assertSerializedFieldEqual(models.CharField(max_length=255))
         self.assertSerializedFieldEqual(models.TextField(null=True, blank=True))
+        # Setting references
+        self.assertSerializedEqual(SettingsReference(settings.AUTH_USER_MODEL, "AUTH_USER_MODEL"))
+        self.assertSerializedResultEqual(
+            SettingsReference("someapp.model", "AUTH_USER_MODEL"),
+            (
+                "settings.AUTH_USER_MODEL",
+                set(["from django.conf import settings"]),
+            )
+        )
+        self.assertSerializedResultEqual(
+            ((x, x * x) for x in range(3)),
+            (
+                "((0, 0), (1, 1), (2, 4))",
+                set(),
+            )
+        )
 
     def test_simple_migration(self):
         """
         Tests serializing a simple migration.
         """
+        fields = {
+            'charfield': models.DateTimeField(default=datetime.datetime.utcnow),
+            'datetimefield': models.DateTimeField(default=datetime.datetime.utcnow),
+        }
+
+        options = {
+            'verbose_name': 'My model',
+            'verbose_name_plural': 'My models',
+        }
+
         migration = type(str("Migration"), (migrations.Migration,), {
             "operations": [
+                migrations.CreateModel("MyModel", tuple(fields.items()), options, (models.Model,)),
+                migrations.CreateModel("MyModel2", tuple(fields.items()), bases=(models.Model,)),
+                migrations.CreateModel(name="MyModel3", fields=tuple(fields.items()), options=options, bases=(models.Model,)),
                 migrations.DeleteModel("MyModel"),
-                migrations.AddField("OtherModel", "field_name", models.DateTimeField(default=datetime.datetime.utcnow))
+                migrations.AddField("OtherModel", "datetimefield", fields["datetimefield"]),
             ],
             "dependencies": [("testapp", "some_other_one")],
         })
@@ -116,8 +144,6 @@ class WriterTests(TestCase):
         self.assertIn("Migration", result)
 
     def test_migration_path(self):
-        _old_app_store = copy.deepcopy(cache.app_store)
-
         test_apps = [
             'migrations.migrations_test_apps.normal',
             'migrations.migrations_test_apps.with_package_model',
@@ -125,13 +151,9 @@ class WriterTests(TestCase):
 
         base_dir = os.path.dirname(os.path.dirname(__file__))
 
-        try:
-            with override_settings(INSTALLED_APPS=test_apps):
-                for app in test_apps:
-                    cache.load_app(app)
-                    migration = migrations.Migration('0001_initial', app.split('.')[-1])
-                    expected_path = os.path.join(base_dir, *(app.split('.') + ['migrations', '0001_initial.py']))
-                    writer = MigrationWriter(migration)
-                    self.assertEqual(writer.path, expected_path)
-        finally:
-            cache.app_store = _old_app_store
+        for app in test_apps:
+            with self.modify_settings(INSTALLED_APPS={'append': app}):
+                migration = migrations.Migration('0001_initial', app.split('.')[-1])
+                expected_path = os.path.join(base_dir, *(app.split('.') + ['migrations', '0001_initial.py']))
+                writer = MigrationWriter(migration)
+                self.assertEqual(writer.path, expected_path)

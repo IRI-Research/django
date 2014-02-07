@@ -110,14 +110,14 @@ pygments_style = 'trac'
 # Links to Python's docs should reference the most recent version of the 2.x
 # branch, which is located at this URL.
 intersphinx_mapping = {
-    'python': ('http://docs.python.org/2.7', None),
+    'python': ('http://docs.python.org/', None),
     'sphinx': ('http://sphinx-doc.org/', None),
     'six': ('http://pythonhosted.org/six/', None),
     'simplejson': ('http://simplejson.readthedocs.org/en/latest/', None),
 }
 
 # Python's docs don't change every week.
-intersphinx_cache_limit = 90 # days
+intersphinx_cache_limit = 90  # days
 
 # -- Options for HTML output ---------------------------------------------------
 

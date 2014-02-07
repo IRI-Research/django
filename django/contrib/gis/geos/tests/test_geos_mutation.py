@@ -16,41 +16,54 @@ if HAS_GEOS:
     def api_get_distance(x):
         return x.distance(Point(-200, -200))
 
+
 def api_get_buffer(x):
     return x.buffer(10)
+
 
 def api_get_geom_typeid(x):
     return x.geom_typeid
 
+
 def api_get_num_coords(x):
     return x.num_coords
+
 
 def api_get_centroid(x):
     return x.centroid
 
+
 def api_get_empty(x):
     return x.empty
+
 
 def api_get_valid(x):
     return x.valid
 
+
 def api_get_simple(x):
     return x.simple
+
 
 def api_get_ring(x):
     return x.ring
 
+
 def api_get_boundary(x):
     return x.boundary
+
 
 def api_get_convex_hull(x):
     return x.convex_hull
 
+
 def api_get_extent(x):
     return x.extent
 
+
 def api_get_area(x):
     return x.area
+
 
 def api_get_length(x):
     return x.length
@@ -104,7 +117,7 @@ class GEOSMutationTest(unittest.TestCase):
     def test04_LineStringMutations(self):
         'Testing LineString mutations'
         for ls in (LineString((1, 0), (4, 1), (6, -1)),
-                    fromstr('LINESTRING (1 0,4 1,6 -1)')):
+                   fromstr('LINESTRING (1 0,4 1,6 -1)')):
             self.assertEqual(ls._get_single_external(1), (4.0, 1.0), 'LineString _get_single_external')
 
             # _set_single
@@ -122,14 +135,14 @@ class GEOSMutationTest(unittest.TestCase):
     def test05_Polygon(self):
         'Testing Polygon mutations'
         for pg in (Polygon(((1, 0), (4, 1), (6, -1), (8, 10), (1, 0)),
-                            ((5, 4), (6, 4), (6, 3), (5, 4))),
-                    fromstr('POLYGON ((1 0,4 1,6 -1,8 10,1 0),(5 4,6 4,6 3,5 4))')):
+                           ((5, 4), (6, 4), (6, 3), (5, 4))),
+                   fromstr('POLYGON ((1 0,4 1,6 -1,8 10,1 0),(5 4,6 4,6 3,5 4))')):
             self.assertEqual(pg._get_single_external(0),
-                            LinearRing((1, 0), (4, 1), (6, -1), (8, 10), (1, 0)),
-                            'Polygon _get_single_external(0)')
+                             LinearRing((1, 0), (4, 1), (6, -1), (8, 10), (1, 0)),
+                             'Polygon _get_single_external(0)')
             self.assertEqual(pg._get_single_external(1),
-                            LinearRing((5, 4), (6, 4), (6, 3), (5, 4)),
-                            'Polygon _get_single_external(1)')
+                             LinearRing((5, 4), (6, 4), (6, 3), (5, 4)),
+                             'Polygon _get_single_external(1)')
 
             # _set_list
             pg._set_list(2, (((1, 2), (10, 0), (12, 9), (-1, 15), (1, 2)),
@@ -147,7 +160,7 @@ class GEOSMutationTest(unittest.TestCase):
     def test06_Collection(self):
         'Testing Collection mutations'
         for mp in (MultiPoint(*map(Point, ((3, 4), (-1, 2), (5, -4), (2, 8)))),
-                    fromstr('MULTIPOINT (3 4,-1 2,5 -4,2 8)')):
+                fromstr('MULTIPOINT (3 4,-1 2,5 -4,2 8)')):
             self.assertEqual(mp._get_single_external(2), Point(5, -4), 'Collection _get_single_external')
 
             mp._set_list(3, map(Point, ((5, 5), (3, -2), (8, 1))))

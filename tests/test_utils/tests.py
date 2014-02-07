@@ -56,9 +56,7 @@ class AssertNumQueriesTests(TestCase):
         def test_func():
             raise ValueError
 
-        self.assertRaises(ValueError,
-            self.assertNumQueries, 2, test_func
-        )
+        self.assertRaises(ValueError, self.assertNumQueries, 2, test_func)
 
     def test_assert_num_queries_with_client(self):
         person = Person.objects.create(name='test')
@@ -194,6 +192,7 @@ class AssertNumQueriesContextManagerTests(TestCase):
             with self.assertNumQueries(2):
                 Person.objects.count()
         self.assertIn("1 queries executed, 2 expected", str(exc_info.exception))
+        self.assertIn("Captured queries were", str(exc_info.exception))
 
         with self.assertRaises(TypeError):
             with self.assertNumQueries(4000):
@@ -214,6 +213,8 @@ class AssertNumQueriesContextManagerTests(TestCase):
 
 
 class AssertTemplateUsedContextManagerTests(TestCase):
+    urls = 'test_utils.urls'
+
     def test_usage(self):
         with self.assertTemplateUsed('template_used/base.html'):
             render_to_string('template_used/base.html')
@@ -269,6 +270,11 @@ class AssertTemplateUsedContextManagerTests(TestCase):
         with six.assertRaisesRegex(self, AssertionError, r'^template_used/base\.html.*template_used/alternative\.html$'):
             with self.assertTemplateUsed('template_used/base.html'):
                 render_to_string('template_used/alternative.html')
+
+        with self.assertRaises(AssertionError) as cm:
+            response = self.client.get('/test_utils/no_template_used/')
+            self.assertTemplateUsed(response, 'template_used/base.html')
+        self.assertEqual(cm.exception.args[0], "No templates used to render the response")
 
     def test_failure(self):
         with self.assertRaises(TypeError):

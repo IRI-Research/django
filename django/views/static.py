@@ -15,7 +15,8 @@ from django.http import (Http404, HttpResponse, HttpResponseRedirect,
 from django.template import loader, Template, Context, TemplateDoesNotExist
 from django.utils.http import http_date, parse_http_date
 from django.utils.six.moves.urllib.parse import unquote
-from django.utils.translation import ugettext as _, ugettext_noop
+from django.utils.translation import ugettext as _, ugettext_lazy
+
 
 def serve(request, path, document_root=None, show_indexes=False):
     """
@@ -93,7 +94,8 @@ DEFAULT_DIRECTORY_INDEX_TEMPLATE = """
   </body>
 </html>
 """
-template_translatable = ugettext_noop("Index of %(directory)s")
+template_translatable = ugettext_lazy("Index of %(directory)s")
+
 
 def directory_index(path, fullpath):
     try:
@@ -112,6 +114,7 @@ def directory_index(path, fullpath):
         'file_list': files,
     })
     return HttpResponse(t.render(c))
+
 
 def was_modified_since(header=None, mtime=0, size=0):
     """

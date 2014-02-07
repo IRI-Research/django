@@ -1,4 +1,3 @@
-from functools import wraps
 from importlib import import_module
 import os
 import pkgutil
@@ -279,10 +278,9 @@ class ConnectionRouter(object):
                     return allow
         return True
 
-    def get_migratable_models(self, app, db, include_auto_created=False):
+    def get_migratable_models(self, app_config, db, include_auto_created=False):
         """
         Return app models allowed to be synchronized on provided db.
         """
-        from .models import get_models
-        return [model for model in get_models(app, include_auto_created=include_auto_created)
-                if self.allow_migrate(db, model)]
+        models = app_config.get_models(include_auto_created=include_auto_created)
+        return [model for model in models if self.allow_migrate(db, model)]

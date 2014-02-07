@@ -6,8 +6,8 @@ import unittest
 from zipimport import zipimporter
 
 from django.core.exceptions import ImproperlyConfigured
-from django.test import SimpleTestCase
-from django.test.utils import override_settings
+from django.test import SimpleTestCase, modify_settings
+from django.test.utils import extend_sys_path
 from django.utils import six
 from django.utils.module_loading import autodiscover_modules, import_by_path, module_has_submodule
 from django.utils._os import upath
@@ -44,7 +44,7 @@ class DefaultLoader(unittest.TestCase):
         self.assertRaises(ImportError, import_module, 'utils_tests.test_module.django')
 
         # Don't be confused by caching of import misses
-        import types  # causes attempted import of utils_tests.types
+        import types  # NOQA: causes attempted import of utils_tests.types
         self.assertFalse(module_has_submodule(sys.modules['utils_tests'], 'types'))
 
         # A module which doesn't have a __path__ (so no submodules)
@@ -52,13 +52,12 @@ class DefaultLoader(unittest.TestCase):
         self.assertRaises(ImportError, import_module,
             'utils_tests.test_no_submodule.anything')
 
+
 class EggLoader(unittest.TestCase):
     def setUp(self):
-        self.old_path = sys.path[:]
         self.egg_dir = '%s/eggs' % os.path.dirname(upath(__file__))
 
     def tearDown(self):
-        sys.path = self.old_path
         sys.path_importer_cache.clear()
 
         sys.modules.pop('egg_module.sub1.sub2.bad_module', None)
@@ -72,40 +71,40 @@ class EggLoader(unittest.TestCase):
     def test_shallow_loader(self):
         "Module existence can be tested inside eggs"
         egg_name = '%s/test_egg.egg' % self.egg_dir
-        sys.path.append(egg_name)
-        egg_module = import_module('egg_module')
+        with extend_sys_path(egg_name):
+            egg_module = import_module('egg_module')
 
-        # An importable child
-        self.assertTrue(module_has_submodule(egg_module, 'good_module'))
-        mod = import_module('egg_module.good_module')
-        self.assertEqual(mod.content, 'Good Module')
+            # An importable child
+            self.assertTrue(module_has_submodule(egg_module, 'good_module'))
+            mod = import_module('egg_module.good_module')
+            self.assertEqual(mod.content, 'Good Module')
 
-        # A child that exists, but will generate an import error if loaded
-        self.assertTrue(module_has_submodule(egg_module, 'bad_module'))
-        self.assertRaises(ImportError, import_module, 'egg_module.bad_module')
+            # A child that exists, but will generate an import error if loaded
+            self.assertTrue(module_has_submodule(egg_module, 'bad_module'))
+            self.assertRaises(ImportError, import_module, 'egg_module.bad_module')
 
-        # A child that doesn't exist
-        self.assertFalse(module_has_submodule(egg_module, 'no_such_module'))
-        self.assertRaises(ImportError, import_module, 'egg_module.no_such_module')
+            # A child that doesn't exist
+            self.assertFalse(module_has_submodule(egg_module, 'no_such_module'))
+            self.assertRaises(ImportError, import_module, 'egg_module.no_such_module')
 
     def test_deep_loader(self):
         "Modules deep inside an egg can still be tested for existence"
         egg_name = '%s/test_egg.egg' % self.egg_dir
-        sys.path.append(egg_name)
-        egg_module = import_module('egg_module.sub1.sub2')
+        with extend_sys_path(egg_name):
+            egg_module = import_module('egg_module.sub1.sub2')
 
-        # An importable child
-        self.assertTrue(module_has_submodule(egg_module, 'good_module'))
-        mod = import_module('egg_module.sub1.sub2.good_module')
-        self.assertEqual(mod.content, 'Deep Good Module')
+            # An importable child
+            self.assertTrue(module_has_submodule(egg_module, 'good_module'))
+            mod = import_module('egg_module.sub1.sub2.good_module')
+            self.assertEqual(mod.content, 'Deep Good Module')
 
-        # A child that exists, but will generate an import error if loaded
-        self.assertTrue(module_has_submodule(egg_module, 'bad_module'))
-        self.assertRaises(ImportError, import_module, 'egg_module.sub1.sub2.bad_module')
+            # A child that exists, but will generate an import error if loaded
+            self.assertTrue(module_has_submodule(egg_module, 'bad_module'))
+            self.assertRaises(ImportError, import_module, 'egg_module.sub1.sub2.bad_module')
 
-        # A child that doesn't exist
-        self.assertFalse(module_has_submodule(egg_module, 'no_such_module'))
-        self.assertRaises(ImportError, import_module, 'egg_module.sub1.sub2.no_such_module')
+            # A child that doesn't exist
+            self.assertFalse(module_has_submodule(egg_module, 'no_such_module'))
+            self.assertRaises(ImportError, import_module, 'egg_module.sub1.sub2.no_such_module')
 
 
 class ModuleImportTestCase(unittest.TestCase):
@@ -133,7 +132,8 @@ class ModuleImportTestCase(unittest.TestCase):
         self.assertIsNotNone(traceback.tb_next.tb_next,
             'Should have more than the calling frame in the traceback.')
 
-@override_settings(INSTALLED_APPS=('utils_tests.test_module',))
+
+@modify_settings(INSTALLED_APPS={'append': 'utils_tests.test_module'})
 class AutodiscoverModulesTestCase(SimpleTestCase):
 
     def test_autodiscover_modules_found(self):
@@ -188,6 +188,7 @@ class ProxyFinder(object):
             if fd:
                 fd.close()
 
+
 class TestFinder(object):
     def __init__(self, *args, **kwargs):
         self.importer = zipimporter(*args, **kwargs)
@@ -198,6 +199,7 @@ class TestFinder(object):
             return
         return TestLoader(importer)
 
+
 class TestLoader(object):
     def __init__(self, importer):
         self.importer = importer
@@ -206,6 +208,7 @@ class TestLoader(object):
         mod = self.importer.load_module(name)
         mod.__loader__ = self
         return mod
+
 
 class CustomLoader(EggLoader):
     """The Custom Loader test is exactly the same as the EggLoader, but

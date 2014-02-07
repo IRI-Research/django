@@ -798,8 +798,8 @@ relationship, and does the 'joining' in Python. This allows it to prefetch
 many-to-many and many-to-one objects, which cannot be done using
 ``select_related``, in addition to the foreign key and one-to-one relationships
 that are supported by ``select_related``. It also supports prefetching of
-:class:`~django.contrib.contenttypes.generic.GenericRelation` and
-:class:`~django.contrib.contenttypes.generic.GenericForeignKey`.
+:class:`~django.contrib.contenttypes.fields.GenericRelation` and
+:class:`~django.contrib.contenttypes.fields.GenericForeignKey`.
 
 For example, suppose you have these models::
 
@@ -898,7 +898,7 @@ objects have already been fetched, and it will skip fetching them again.
 
 Chaining ``prefetch_related`` calls will accumulate the lookups that are
 prefetched. To clear any ``prefetch_related`` behavior, pass ``None`` as a
-parameter::
+parameter:
 
    >>> non_prefetched = qs.prefetch_related(None)
 
@@ -924,6 +924,91 @@ profile for your use case!
 
 Note that if you use ``iterator()`` to run the query, ``prefetch_related()``
 calls will be ignored since these two optimizations do not make sense together.
+
+.. versionadded:: 1.7
+
+You can use the :class:`~django.db.models.Prefetch` object to further control
+the prefetch operation.
+
+In its simplest form ``Prefetch`` is equivalent to the traditional string based
+lookups:
+
+    >>> Restaurant.objects.prefetch_related(Prefetch('pizzas__toppings'))
+
+You can provide a custom queryset with the optional ``queryset`` argument.
+This can be used to change the default ordering of the queryset:
+
+    >>> Restaurant.objects.prefetch_related(
+    ...     Prefetch('pizzas__toppings', queryset=Toppings.objects.order_by('name')))
+
+Or to call :meth:`~django.db.models.query.QuerySet.select_related()` when
+applicable to reduce the number of queries even further:
+
+    >>> Pizza.objects.prefetch_related(
+    ...     Prefetch('restaurants', queryset=Restaurant.objects.select_related('best_pizza')))
+
+You can also assign the prefetched result to a custom attribute with the optional
+``to_attr`` argument. The result will be stored directly in a list.
+
+This allows prefetching the same relation multiple times with a different
+``QuerySet``; for instance:
+
+    >>> vegetarian_pizzas = Pizza.objects.filter(vegetarian=True)
+    >>> Restaurant.objects.prefetch_related(
+    ...     Prefetch('pizzas', to_attr='menu'),
+    ...     Prefetch('pizzas', queryset=vegetarian_pizzas, to_attr='vegetarian_menu'))
+
+Lookups created with custom ``to_attr`` can still be traversed as usual by other
+lookups:
+
+    >>> vegetarian_pizzas = Pizza.objects.filter(vegetarian=True)
+    >>> Restaurant.objects.prefetch_related(
+    ...     Prefetch('pizzas', queryset=vegetarian_pizzas, to_attr='vegetarian_menu'),
+    ...     'vegetarian_menu__toppings')
+
+Using ``to_attr`` is recommended when filtering down the prefetch result as it is
+less ambiguous than storing a filtered result in the related manager's cache:
+
+    >>> queryset = Pizza.objects.filter(vegetarian=True)
+    >>>
+    >>> # Recommended:
+    >>> restaurants = Restaurant.objects.prefetch_related(
+    ...     Prefetch('pizzas', to_attr='vegetarian_pizzas' queryset=queryset))
+    >>> vegetarian_pizzas = restaurants[0].vegetarian_pizzas
+    >>>
+    >>> # Not recommended:
+    >>> restaurants = Restaurant.objects.prefetch_related(
+    ...     Prefetch('pizzas', queryset=queryset))
+    >>> vegetarian_pizzas = restaurants[0].pizzas.all()
+
+.. note::
+
+    The ordering of lookups matters.
+
+    Take the following examples:
+
+       >>> prefetch_related('pizzas__toppings', 'pizzas')
+
+    This works even though it's unordered because ``'pizzas__toppings'``
+    already contains all the needed information, therefore the second argument
+    ``'pizzas'`` is actually redundant.
+
+        >>> prefetch_related('pizzas__toppings', Prefetch('pizzas', queryset=Pizza.objects.all()))
+
+    This will raise a ``ValueError`` because of the attempt to redefine the
+    queryset of a previously seen lookup. Note that an implicit queryset was
+    created to traverse ``'pizzas'`` as part of the ``'pizzas__toppings'``
+    lookup.
+
+        >>> prefetch_related('pizza_list__toppings', Prefetch('pizzas', to_attr='pizza_list'))
+
+    This will trigger an ``AttributeError`` because ``'pizza_list'`` doesn't exist yet
+    when ``'pizza_list__toppings'`` is being processed.
+
+    This consideration is not limited to the use of ``Prefetch`` objects. Some
+    advanced techniques may require that the lookups be performed in a
+    specific order to avoid creating extra queries; therefore it's recommended
+    to always carefully order ``prefetch_related`` arguments.
 
 extra
 ~~~~~
@@ -1432,11 +1517,11 @@ where ``get_or_create`` will raise an :exc:`~django.db.IntegrityError` but the
 object won't appear in a subsequent :meth:`~django.db.models.query.QuerySet.get`
 call.
 
-Finally, a word on using ``get_or_create()`` in Django views: please make sure
-to use it only in ``POST`` requests unless you have a good reason not to
-``GET`` requests shouldn't have any effect on data; use ``POST`` whenever a
-request to a page has a side effect on your data. For more, see `Safe methods`_
-in the HTTP spec.
+Finally, a word on using ``get_or_create()`` in Django views. Please make sure
+to use it only in ``POST`` requests unless you have a good reason not to.
+``GET`` requests shouldn't have any effect on data. Instead, use ``POST``
+whenever a request to a page has a side effect on your data. For more, see
+`Safe methods`_ in the HTTP spec.
 
 .. _Safe methods: http://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#sec9.1.1
 
@@ -1540,6 +1625,7 @@ This has a number of caveats though:
 * It does not work with child models in a multi-table inheritance scenario.
 * If the model's primary key is an :class:`~django.db.models.AutoField` it
   does not retrieve and set the primary key attribute, as ``save()`` does.
+* It does not work with many-to-many relationships.
 
 The ``batch_size`` parameter controls how many objects are created in single
 query. The default is to create all objects in one batch, except for SQLite
@@ -1909,6 +1995,9 @@ specified as keyword arguments to the ``QuerySet`` methods :meth:`filter()`,
 For an introduction, see :ref:`models and database queries documentation
 <field-lookups-intro>`.
 
+Django's inbuilt lookups are listed below. It is also possible to write
+:doc:`custom lookups </ref/models/custom-lookups>` for model fields.
+
 .. fieldlookup:: exact
 
 exact
@@ -1943,9 +2032,15 @@ iexact
 
 Case-insensitive exact match.
 
+.. versionchanged:: 1.7
+
+    If the value provided for comparision is ``None``, it will be interpreted
+    as an SQL ``NULL`` (see :lookup:`isnull` for more details).
+
 Example::
 
     Blog.objects.get(name__iexact='beatles blog')
+    Blog.objects.get(name__iexact=None)
 
 SQL equivalent::
 
@@ -2046,6 +2141,8 @@ extract two field values, where only one is expected::
     # Bad code! Will raise a TypeError.
     inner_qs = Blog.objects.filter(name__contains='Ch').values('name', 'id')
     entries = Entry.objects.filter(blog__name__in=inner_qs)
+
+.. _nested-queries-performance:
 
 .. admonition:: Performance considerations
 

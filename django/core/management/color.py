@@ -7,17 +7,21 @@ import sys
 
 from django.utils import termcolors
 
+
 def supports_color():
     """
     Returns True if the running system's terminal supports color, and False
     otherwise.
     """
-    unsupported_platform = (sys.platform in ('win32', 'Pocket PC'))
+    plat = sys.platform
+    supported_platform = plat != 'Pocket PC' and (plat != 'win32' or
+                                                  'ANSICON' in os.environ)
     # isatty is not always implemented, #6223.
     is_a_tty = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
-    if unsupported_platform or not is_a_tty:
+    if not supported_platform or not is_a_tty:
         return False
     return True
+
 
 def color_style():
     """Returns a Style object with the Django color scheme."""
@@ -42,6 +46,7 @@ def color_style():
         else:
             style = no_style()
     return style
+
 
 def no_style():
     """Returns a Style object that has no colors."""

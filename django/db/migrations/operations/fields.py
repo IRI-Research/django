@@ -1,4 +1,5 @@
 from django.db import router
+from django.db.models.fields import NOT_PROVIDED
 from .base import Operation
 
 
@@ -7,19 +8,34 @@ class AddField(Operation):
     Adds a field to a model.
     """
 
-    def __init__(self, model_name, name, field):
-        self.model_name = model_name.lower()
+    def __init__(self, model_name, name, field, preserve_default=True):
+        self.model_name = model_name
         self.name = name
         self.field = field
+        self.preserve_default = preserve_default
 
     def state_forwards(self, app_label, state):
-        state.models[app_label, self.model_name.lower()].fields.append((self.name, self.field))
+        # If preserve default is off, don't use the default for future state
+        if not self.preserve_default:
+            field = self.field.clone()
+            field.default = NOT_PROVIDED
+        else:
+            field = self.field
+        state.models[app_label, self.model_name.lower()].fields.append((self.name, field))
 
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
         from_model = from_state.render().get_model(app_label, self.model_name)
         to_model = to_state.render().get_model(app_label, self.model_name)
         if router.allow_migrate(schema_editor.connection.alias, to_model):
-            schema_editor.add_field(from_model, to_model._meta.get_field_by_name(self.name)[0])
+            field = to_model._meta.get_field_by_name(self.name)[0]
+            if not self.preserve_default:
+                field.default = self.field.default
+            schema_editor.add_field(
+                from_model,
+                field,
+            )
+            if not self.preserve_default:
+                field.default = NOT_PROVIDED
 
     def database_backwards(self, app_label, schema_editor, from_state, to_state):
         from_model = from_state.render().get_model(app_label, self.model_name)
@@ -33,9 +49,15 @@ class AddField(Operation):
         return (
             (self.__class__ == other.__class__) and
             (self.name == other.name) and
-            (self.model_name == other.model_name) and
+            (self.model_name.lower() == other.model_name.lower()) and
             (self.field.deconstruct()[1:] == other.field.deconstruct()[1:])
         )
+
+    def references_model(self, name, app_label=None):
+        return name.lower() == self.model_name.lower()
+
+    def references_field(self, model_name, name, app_label=None):
+        return self.references_model(model_name) and name.lower() == self.name.lower()
 
 
 class RemoveField(Operation):
@@ -44,7 +66,7 @@ class RemoveField(Operation):
     """
 
     def __init__(self, model_name, name):
-        self.model_name = model_name.lower()
+        self.model_name = model_name
         self.name = name
 
     def state_forwards(self, app_label, state):
@@ -68,6 +90,12 @@ class RemoveField(Operation):
     def describe(self):
         return "Remove field %s from %s" % (self.name, self.model_name)
 
+    def references_model(self, name, app_label=None):
+        return name.lower() == self.model_name.lower()
+
+    def references_field(self, model_name, name, app_label=None):
+        return self.references_model(model_name) and name.lower() == self.name.lower()
+
 
 class AlterField(Operation):
     """
@@ -75,7 +103,7 @@ class AlterField(Operation):
     """
 
     def __init__(self, model_name, name, field):
-        self.model_name = model_name.lower()
+        self.model_name = model_name
         self.name = name
         self.field = field
 
@@ -104,9 +132,15 @@ class AlterField(Operation):
         return (
             (self.__class__ == other.__class__) and
             (self.name == other.name) and
-            (self.model_name == other.model_name) and
+            (self.model_name.lower() == other.model_name.lower()) and
             (self.field.deconstruct()[1:] == other.field.deconstruct()[1:])
         )
+
+    def references_model(self, name, app_label=None):
+        return name.lower() == self.model_name.lower()
+
+    def references_field(self, model_name, name, app_label=None):
+        return self.references_model(model_name) and name.lower() == self.name.lower()
 
 
 class RenameField(Operation):
@@ -115,7 +149,7 @@ class RenameField(Operation):
     """
 
     def __init__(self, model_name, old_name, new_name):
-        self.model_name = model_name.lower()
+        self.model_name = model_name
         self.old_name = old_name
         self.new_name = new_name
 
@@ -146,3 +180,12 @@ class RenameField(Operation):
 
     def describe(self):
         return "Rename field %s on %s to %s" % (self.old_name, self.model_name, self.new_name)
+
+    def references_model(self, name, app_label=None):
+        return name.lower() == self.model_name.lower()
+
+    def references_field(self, model_name, name, app_label=None):
+        return self.references_model(model_name) and (
+            name.lower() == self.old_name.lower() or
+            name.lower() == self.new_name.lower()
+        )

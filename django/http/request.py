@@ -66,7 +66,7 @@ class HttpRequest(object):
         """Returns the HTTP host using the environment or request headers."""
         # We try three options, in order of decreasing preference.
         if settings.USE_X_FORWARDED_HOST and (
-            'HTTP_X_FORWARDED_HOST' in self.META):
+                'HTTP_X_FORWARDED_HOST' in self.META):
             host = self.META['HTTP_X_FORWARDED_HOST']
         elif 'HTTP_HOST' in self.META:
             host = self.META['HTTP_HOST']
@@ -242,20 +242,20 @@ class HttpRequest(object):
                 # Mark that an error occured. This allows self.__repr__ to
                 # be explicit about it instead of simply representing an
                 # empty POST
-                # self._mark_post_parse_error()
+                self._mark_post_parse_error()
                 raise
         elif self.META.get('CONTENT_TYPE', '').startswith('application/x-www-form-urlencoded'):
             self._post, self._files = QueryDict(self.body, encoding=self._encoding), MultiValueDict()
         else:
             self._post, self._files = QueryDict('', encoding=self._encoding), MultiValueDict()
 
-    ## File-like and iterator interface.
-    ##
-    ## Expects self._stream to be set to an appropriate source of bytes by
-    ## a corresponding request subclass (e.g. WSGIRequest).
-    ## Also when request data has already been read by request.POST or
-    ## request.body, self._stream points to a BytesIO instance
-    ## containing that data.
+    # File-like and iterator interface.
+    #
+    # Expects self._stream to be set to an appropriate source of bytes by
+    # a corresponding request subclass (e.g. WSGIRequest).
+    # Also when request data has already been read by request.POST or
+    # request.body, self._stream points to a BytesIO instance
+    # containing that data.
 
     def read(self, *args, **kwargs):
         self._read_started = True

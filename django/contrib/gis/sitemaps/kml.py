@@ -1,7 +1,9 @@
+from django.apps import apps
 from django.core import urlresolvers
 from django.contrib.sitemaps import Sitemap
 from django.contrib.gis.db.models.fields import GeometryField
 from django.db import models
+
 
 class KMLSitemap(Sitemap):
     """
@@ -24,7 +26,7 @@ class KMLSitemap(Sitemap):
         """
         kml_sources = []
         if sources is None:
-            sources = models.get_models()
+            sources = apps.get_models()
         for source in sources:
             if isinstance(source, models.base.ModelBase):
                 for field in source._meta.fields:
@@ -60,5 +62,7 @@ class KMLSitemap(Sitemap):
                                             'field_name': obj[2],
                                             }
                                     )
+
+
 class KMZSitemap(KMLSitemap):
     geo_format = 'kmz'

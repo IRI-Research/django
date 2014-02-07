@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 
 import unittest
 
-from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured, ViewDoesNotExist
 from django.core.urlresolvers import (reverse, reverse_lazy, resolve, get_callable,
@@ -13,11 +12,11 @@ from django.core.urlresolvers import (reverse, reverse_lazy, resolve, get_callab
     RegexURLPattern)
 from django.http import HttpRequest, HttpResponseRedirect, HttpResponsePermanentRedirect
 from django.shortcuts import redirect
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings
 from django.utils import six
 
 from . import urlconf_outer, middleware, views
+from .views import empty_view
 
 
 resolve_test_data = (
@@ -149,6 +148,7 @@ test_data = (
     ('defaults', NoReverseMatch, [], {'arg2': 1}),
 )
 
+
 class NoURLPatternsTests(TestCase):
     urls = 'urlpatterns_reverse.no_urls'
 
@@ -161,6 +161,7 @@ class NoURLPatternsTests(TestCase):
         self.assertRaisesMessage(ImproperlyConfigured,
             "The included urlconf urlpatterns_reverse.no_urls "
             "doesn't have any patterns in it", getattr, resolver, 'url_patterns')
+
 
 class URLPatternReverse(TestCase):
     urls = 'urlpatterns_reverse.urls'
@@ -283,6 +284,7 @@ class ResolverTests(unittest.TestCase):
                         else:
                             self.assertEqual(t.name, e['name'], 'Wrong URL name.  Expected "%s", got "%s".' % (e['name'], t.name))
 
+
 class ReverseLazyTest(TestCase):
     urls = 'urlpatterns_reverse.reverse_lazy_urls'
 
@@ -297,6 +299,7 @@ class ReverseLazyTest(TestCase):
         self.client.login(username='alfred', password='testpw')
         response = self.client.get('/login_required_view/')
         self.assertEqual(response.status_code, 200)
+
 
 class ReverseShortcutTests(TestCase):
     urls = 'urlpatterns_reverse.urls'
@@ -398,8 +401,8 @@ class NamespaceTests(TestCase):
         self.assertEqual('/ns-outer/42/normal/', reverse('inc-outer:inc-normal-view', args=[42]))
         self.assertEqual('/ns-outer/42/normal/37/4/', reverse('inc-outer:inc-normal-view', kwargs={'outer': 42, 'arg1': 37, 'arg2': 4}))
         self.assertEqual('/ns-outer/42/normal/37/4/', reverse('inc-outer:inc-normal-view', args=[42, 37, 4]))
-        self.assertEqual('/ns-outer/42/+%5C$*/', reverse('inc-outer:inc-special-view',  kwargs={'outer': 42}))
-        self.assertEqual('/ns-outer/42/+%5C$*/', reverse('inc-outer:inc-special-view',  args=[42]))
+        self.assertEqual('/ns-outer/42/+%5C$*/', reverse('inc-outer:inc-special-view', kwargs={'outer': 42}))
+        self.assertEqual('/ns-outer/42/+%5C$*/', reverse('inc-outer:inc-special-view', args=[42]))
 
     def test_multiple_namespace_pattern(self):
         "Namespaces can be embedded"
@@ -455,7 +458,7 @@ class NamespaceTests(TestCase):
         self.assertEqual('/inc78/extra/foobar/', reverse('inc-ns5:inner-extra', args=['78', 'foobar']))
 
 
-@override_settings(ROOT_URLCONF = urlconf_outer.__name__)
+@override_settings(ROOT_URLCONF=urlconf_outer.__name__)
 class RequestURLconfTests(TestCase):
     def test_urlconf(self):
         response = self.client.get('/test/me/')
@@ -550,6 +553,7 @@ class RequestURLconfTests(TestCase):
             self.client.get('/second_test/')
             b''.join(self.client.get('/second_test/'))
 
+
 class ErrorHandlerResolutionTests(TestCase):
     """Tests for handler400, handler404 and handler500"""
 
@@ -561,18 +565,17 @@ class ErrorHandlerResolutionTests(TestCase):
         self.callable_resolver = RegexURLResolver(r'^$', urlconf_callables)
 
     def test_named_handlers(self):
-        from .views import empty_view
         handler = (empty_view, {})
         self.assertEqual(self.resolver.resolve400(), handler)
         self.assertEqual(self.resolver.resolve404(), handler)
         self.assertEqual(self.resolver.resolve500(), handler)
 
     def test_callable_handers(self):
-        from .views import empty_view
         handler = (empty_view, {})
         self.assertEqual(self.callable_resolver.resolve400(), handler)
         self.assertEqual(self.callable_resolver.resolve404(), handler)
         self.assertEqual(self.callable_resolver.resolve500(), handler)
+
 
 class DefaultErrorHandlerTests(TestCase):
     urls = 'urlpatterns_reverse.urls_without_full_import'
@@ -590,12 +593,14 @@ class DefaultErrorHandlerTests(TestCase):
         except AttributeError:
             self.fail("Shouldn't get an AttributeError due to undefined 500 handler")
 
+
 class NoRootUrlConfTests(TestCase):
     """Tests for handler404 and handler500 if urlconf is None"""
     urls = None
 
     def test_no_handler_exception(self):
         self.assertRaises(ImproperlyConfigured, self.client.get, '/test/me/')
+
 
 class ResolverMatchTests(TestCase):
     urls = 'urlpatterns_reverse.namespace_urls'
@@ -632,6 +637,7 @@ class ResolverMatchTests(TestCase):
         request = HttpRequest()
         self.assertIsNone(request.resolver_match)
 
+
 class ErroneousViewTests(TestCase):
     urls = 'urlpatterns_reverse.erroneous_urls'
 
@@ -651,14 +657,23 @@ class ErroneousViewTests(TestCase):
         # The regex error will be hit before NoReverseMatch can be raised
         self.assertRaises(ImproperlyConfigured, reverse, 'whatever blah blah')
 
+
 class ViewLoadingTests(TestCase):
     def test_view_loading(self):
+        self.assertEqual(get_callable('urlpatterns_reverse.views.empty_view'),
+                         empty_view)
+
+        # passing a callable should return the callable
+        self.assertEqual(get_callable(empty_view), empty_view)
+
+    def test_exceptions(self):
         # A missing view (identified by an AttributeError) should raise
         # ViewDoesNotExist, ...
-        six.assertRaisesRegex(self, ViewDoesNotExist, ".*View does not exist in.*",
-            get_callable,
-            'urlpatterns_reverse.views.i_should_not_exist')
+        six.assertRaisesRegex(self, ViewDoesNotExist,
+                              ".*View does not exist in.*",
+                              get_callable,
+                              'urlpatterns_reverse.views.i_should_not_exist')
         # ... but if the AttributeError is caused by something else don't
         # swallow it.
         self.assertRaises(AttributeError, get_callable,
-            'urlpatterns_reverse.views_broken.i_am_broken')
+                          'urlpatterns_reverse.views_broken.i_am_broken')

@@ -282,6 +282,10 @@ class FieldsTests(SimpleTestCase):
         self.assertEqual(f.max_value, 1.5)
         self.assertEqual(f.min_value, 0.5)
 
+    def test_floatfield_widget_attrs(self):
+        f = FloatField(widget=NumberInput(attrs={'step': 0.01, 'max': 1.0, 'min': 0.0}))
+        self.assertWidgetRendersTo(f, '<input step="0.01" name="f" min="0.0" max="1.0" type="number" id="id_f" />')
+
     def test_floatfield_localized(self):
         """
         Make sure localized FloatField's widget renders to a text input with
@@ -392,6 +396,8 @@ class FieldsTests(SimpleTestCase):
         self.assertEqual(f.widget_attrs(NumberInput()), {'step': '1e-19'})
         f = DecimalField(max_digits=20)
         self.assertEqual(f.widget_attrs(NumberInput()), {'step': 'any'})
+        f = DecimalField(max_digits=6, widget=NumberInput(attrs={'step': '0.01'}))
+        self.assertWidgetRendersTo(f, '<input step="0.01" name="f" type="number" id="id_f" />')
 
     def test_decimalfield_localized(self):
         """
@@ -691,7 +697,7 @@ class FieldsTests(SimpleTestCase):
         self.assertEqual(SimpleUploadedFile, type(f.clean(SimpleUploadedFile('name', b'Some File Content'), 'files/test4.pdf')))
 
     def test_filefield_2(self):
-        f = FileField(max_length = 5)
+        f = FileField(max_length=5)
         self.assertRaisesMessage(ValidationError, "'Ensure this filename has at most 5 characters (it has 18).'", f.clean, SimpleUploadedFile('test_maxlength.txt', b'hello world'))
         self.assertEqual('files/test1.pdf', f.clean('', 'files/test1.pdf'))
         self.assertEqual('files/test2.pdf', f.clean(None, 'files/test2.pdf'))
@@ -760,11 +766,11 @@ class FieldsTests(SimpleTestCase):
     def test_url_regex_ticket11198(self):
         f = URLField()
         # hangs "forever" if catastrophic backtracking in ticket:#11198 not fixed
-        self.assertRaisesMessage(ValidationError, "'Enter a valid URL.'", f.clean, 'http://%s' % ("X"*200,))
+        self.assertRaisesMessage(ValidationError, "'Enter a valid URL.'", f.clean, 'http://%s' % ("X" * 200,))
 
         # a second test, to make sure the problem is really addressed, even on
         # domains that don't fail the domain label length check in the regex
-        self.assertRaisesMessage(ValidationError, "'Enter a valid URL.'", f.clean, 'http://%s' % ("X"*60,))
+        self.assertRaisesMessage(ValidationError, "'Enter a valid URL.'", f.clean, 'http://%s' % ("X" * 60,))
 
     def test_urlfield_2(self):
         f = URLField(required=False)
@@ -956,6 +962,22 @@ class FieldsTests(SimpleTestCase):
         f = TypedChoiceField(choices=[(1, "+1"), (-1, "-1")], coerce=int, required=True)
         self.assertFalse(f._has_changed(None, ''))
 
+    def test_typedchoicefield_special_coerce(self):
+        """
+        Test a coerce function which results in a value not present in choices.
+        Refs #21397.
+        """
+        def coerce_func(val):
+            return Decimal('1.%s' % val)
+
+        f = TypedChoiceField(choices=[(1, "1"), (2, "2")], coerce=coerce_func, required=True)
+        self.assertEqual(Decimal('1.2'), f.clean('2'))
+        self.assertRaisesMessage(ValidationError,
+            "'This field is required.'", f.clean, '')
+        self.assertRaisesMessage(ValidationError,
+            "'Select a valid choice. 3 is not one of the available choices.'",
+            f.clean, '3')
+
     # NullBooleanField ############################################################
 
     def test_nullbooleanfield_1(self):
@@ -1109,6 +1131,23 @@ class FieldsTests(SimpleTestCase):
         # has_changed should not trigger required validation
         f = TypedMultipleChoiceField(choices=[(1, "+1"), (-1, "-1")], coerce=int, required=True)
         self.assertFalse(f._has_changed(None, ''))
+
+    def test_typedmultiplechoicefield_special_coerce(self):
+        """
+        Test a coerce function which results in a value not present in choices.
+        Refs #21397.
+        """
+        def coerce_func(val):
+            return Decimal('1.%s' % val)
+
+        f = TypedMultipleChoiceField(
+            choices=[(1, "1"), (2, "2")], coerce=coerce_func, required=True)
+        self.assertEqual([Decimal('1.2')], f.clean(['2']))
+        self.assertRaisesMessage(ValidationError,
+            "'This field is required.'", f.clean, [])
+        self.assertRaisesMessage(ValidationError,
+            "'Select a valid choice. 3 is not one of the available choices.'",
+            f.clean, ['3'])
 
    # ComboField ##################################################################
 

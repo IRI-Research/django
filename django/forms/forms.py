@@ -23,6 +23,7 @@ __all__ = ('BaseForm', 'Form')
 
 NON_FIELD_ERRORS = '__all__'
 
+
 def pretty_name(name):
     """Converts 'first_name' to 'First name'"""
     if not name:
@@ -120,7 +121,7 @@ class BaseForm(object):
         # Translators: This is the default suffix added to form field labels
         self.label_suffix = label_suffix if label_suffix is not None else _(':')
         self.empty_permitted = empty_permitted
-        self._errors = None # Stores the errors after clean() has been called.
+        self._errors = None  # Stores the errors after clean() has been called.
         self._changed_data = None
 
         # The base_fields class attribute is the *class-wide* definition of
@@ -176,7 +177,7 @@ class BaseForm(object):
 
     def _html_output(self, normal_row, error_row, row_ender, help_text_html, errors_on_separate_row):
         "Helper function for outputting HTML. Used by as_table(), as_ul(), as_p()."
-        top_errors = self.non_field_errors() # Errors that should be displayed above all fields.
+        top_errors = self.non_field_errors()  # Errors that should be displayed above all fields.
         output, hidden_fields = [], []
 
         for name, field in self.fields.items():
@@ -223,7 +224,7 @@ class BaseForm(object):
         if top_errors:
             output.insert(0, error_row % force_text(top_errors))
 
-        if hidden_fields: # Insert any hidden fields in the last row.
+        if hidden_fields:  # Insert any hidden fields in the last row.
             str_hidden = ''.join(hidden_fields)
             if output:
                 last_row = output[-1]
@@ -248,29 +249,29 @@ class BaseForm(object):
     def as_table(self):
         "Returns this form rendered as HTML <tr>s -- excluding the <table></table>."
         return self._html_output(
-            normal_row = '<tr%(html_class_attr)s><th>%(label)s</th><td>%(errors)s%(field)s%(help_text)s</td></tr>',
-            error_row = '<tr><td colspan="2">%s</td></tr>',
-            row_ender = '</td></tr>',
-            help_text_html = '<br /><span class="helptext">%s</span>',
-            errors_on_separate_row = False)
+            normal_row='<tr%(html_class_attr)s><th>%(label)s</th><td>%(errors)s%(field)s%(help_text)s</td></tr>',
+            error_row='<tr><td colspan="2">%s</td></tr>',
+            row_ender='</td></tr>',
+            help_text_html='<br /><span class="helptext">%s</span>',
+            errors_on_separate_row=False)
 
     def as_ul(self):
         "Returns this form rendered as HTML <li>s -- excluding the <ul></ul>."
         return self._html_output(
-            normal_row = '<li%(html_class_attr)s>%(errors)s%(label)s %(field)s%(help_text)s</li>',
-            error_row = '<li>%s</li>',
-            row_ender = '</li>',
-            help_text_html = ' <span class="helptext">%s</span>',
-            errors_on_separate_row = False)
+            normal_row='<li%(html_class_attr)s>%(errors)s%(label)s %(field)s%(help_text)s</li>',
+            error_row='<li>%s</li>',
+            row_ender='</li>',
+            help_text_html=' <span class="helptext">%s</span>',
+            errors_on_separate_row=False)
 
     def as_p(self):
         "Returns this form rendered as HTML <p>s."
         return self._html_output(
-            normal_row = '<p%(html_class_attr)s>%(label)s %(field)s%(help_text)s</p>',
-            error_row = '%s',
-            row_ender = '</p>',
-            help_text_html = ' <span class="helptext">%s</span>',
-            errors_on_separate_row = True)
+            normal_row='<p%(html_class_attr)s>%(label)s %(field)s%(help_text)s</p>',
+            error_row='%s',
+            row_ender='</p>',
+            help_text_html=' <span class="helptext">%s</span>',
+            errors_on_separate_row=True)
 
     def non_field_errors(self):
         """
@@ -289,19 +290,65 @@ class BaseForm(object):
         prefix = self.add_prefix(fieldname)
         return field.widget.value_from_datadict(self.data, self.files, prefix)
 
+    def add_error(self, field, error):
+        """
+        Update the content of `self._errors`.
+
+        The `field` argument is the name of the field to which the errors
+        should be added. If its value is None the errors will be treated as
+        NON_FIELD_ERRORS.
+
+        The `error` argument can be a single error, a list of errors, or a
+        dictionary that maps field names to lists of errors. What we define as
+        an "error" can be either a simple string or an instance of
+        ValidationError with its message attribute set and what we define as
+        list or dictionary can be an actual `list` or `dict` or an instance
+        of ValidationError with its `error_list` or `error_dict` attribute set.
+
+        If `error` is a dictionary, the `field` argument *must* be None and
+        errors will be added to the fields that correspond to the keys of the
+        dictionary.
+        """
+        if not isinstance(error, ValidationError):
+            # Normalize to ValidationError and let its constructor
+            # do the hard work of making sense of the input.
+            error = ValidationError(error)
+
+        if hasattr(error, 'error_dict'):
+            if field is not None:
+                raise TypeError(
+                    "The argument `field` must be `None` when the `error` "
+                    "argument contains errors for multiple fields."
+                )
+            else:
+                error = error.error_dict
+        else:
+            error = {field or NON_FIELD_ERRORS: error.error_list}
+
+        for field, error_list in error.items():
+            if field not in self.errors:
+                if field != NON_FIELD_ERRORS and field not in self.fields:
+                    raise ValueError(
+                        "'%s' has no field named '%s'." % (self.__class__.__name__, field))
+                self._errors[field] = self.error_class()
+            self._errors[field].extend(error_list)
+            if field in self.cleaned_data:
+                del self.cleaned_data[field]
+
     def full_clean(self):
         """
         Cleans all of self.data and populates self._errors and
         self.cleaned_data.
         """
         self._errors = ErrorDict()
-        if not self.is_bound: # Stop further processing.
+        if not self.is_bound:  # Stop further processing.
             return
         self.cleaned_data = {}
         # If the form is permitted to be empty, and none of the form data has
         # changed from the initial data, short circuit any validation.
         if self.empty_permitted and not self.has_changed():
             return
+
         self._clean_fields()
         self._clean_form()
         self._post_clean()
@@ -323,15 +370,13 @@ class BaseForm(object):
                     value = getattr(self, 'clean_%s' % name)()
                     self.cleaned_data[name] = value
             except ValidationError as e:
-                self._errors[name] = self.error_class(e.messages)
-                if name in self.cleaned_data:
-                    del self.cleaned_data[name]
+                self.add_error(name, e)
 
     def _clean_form(self):
         try:
             cleaned_data = self.clean()
         except ValidationError as e:
-            self._errors[NON_FIELD_ERRORS] = self.error_class(e.messages)
+            self.add_error(None, e)
         else:
             if cleaned_data is not None:
                 self.cleaned_data = cleaned_data
@@ -616,7 +661,7 @@ class BoundField(object):
         """
         Wrapper around the field widget's `id_for_label` method.
         Useful, for example, for focusing on this field regardless of whether
-        it has a single widget or a MutiWidget.
+        it has a single widget or a MultiWidget.
         """
         widget = self.field.widget
         id_ = widget.attrs.get('id') or self.auto_id

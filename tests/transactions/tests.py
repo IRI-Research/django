@@ -202,8 +202,9 @@ class AtomicTests(TransactionTestCase):
             # trigger a database error inside an inner atomic without savepoint
             with self.assertRaises(DatabaseError):
                 with transaction.atomic(savepoint=False):
-                    connection.cursor().execute(
-                        "SELECT no_such_col FROM transactions_reporter")
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT no_such_col FROM transactions_reporter")
             # prevent atomic from rolling back since we're recovering manually
             self.assertTrue(transaction.get_rollback())
             transaction.set_rollback(False)
@@ -395,7 +396,8 @@ class TransactionTests(IgnoreDeprecationWarningsMixin, TransactionTestCase):
         """
         The default behavior is to autocommit after each save() action.
         """
-        self.assertRaises(Exception,
+        self.assertRaises(
+            Exception,
             self.create_a_reporter_then_fail,
             "Alice", "Smith"
         )
@@ -411,7 +413,8 @@ class TransactionTests(IgnoreDeprecationWarningsMixin, TransactionTestCase):
         autocomitted_create_then_fail = transaction.autocommit(
             self.create_a_reporter_then_fail
         )
-        self.assertRaises(Exception,
+        self.assertRaises(
+            Exception,
             autocomitted_create_then_fail,
             "Alice", "Smith"
         )
@@ -426,7 +429,8 @@ class TransactionTests(IgnoreDeprecationWarningsMixin, TransactionTestCase):
         autocomitted_create_then_fail = transaction.autocommit(using='default')(
             self.create_a_reporter_then_fail
         )
-        self.assertRaises(Exception,
+        self.assertRaises(
+            Exception,
             autocomitted_create_then_fail,
             "Alice", "Smith"
         )
@@ -453,7 +457,8 @@ class TransactionTests(IgnoreDeprecationWarningsMixin, TransactionTestCase):
         using_committed_on_success = transaction.commit_on_success(using='default')(
             self.create_a_reporter_then_fail
         )
-        self.assertRaises(Exception,
+        self.assertRaises(
+            Exception,
             using_committed_on_success,
             "Dirk", "Gently"
         )
@@ -519,7 +524,8 @@ class TransactionTests(IgnoreDeprecationWarningsMixin, TransactionTestCase):
         using_manually_managed_mistake = transaction.commit_manually(using='default')(
             self.manually_managed_mistake
         )
-        self.assertRaises(transaction.TransactionManagementError,
+        self.assertRaises(
+            transaction.TransactionManagementError,
             using_manually_managed_mistake
         )
 
@@ -529,8 +535,8 @@ class TransactionRollbackTests(IgnoreDeprecationWarningsMixin, TransactionTestCa
     available_apps = ['transactions']
 
     def execute_bad_sql(self):
-        cursor = connection.cursor()
-        cursor.execute("INSERT INTO transactions_reporter (first_name, last_name) VALUES ('Douglas', 'Adams');")
+        with connection.cursor() as cursor:
+            cursor.execute("INSERT INTO transactions_reporter (first_name, last_name) VALUES ('Douglas', 'Adams');")
 
     @skipUnlessDBFeature('requires_rollback_on_dirty_transaction')
     def test_bad_sql(self):
@@ -543,6 +549,7 @@ class TransactionRollbackTests(IgnoreDeprecationWarningsMixin, TransactionTestCa
         execute_bad_sql = transaction.commit_on_success(self.execute_bad_sql)
         self.assertRaises(IntegrityError, execute_bad_sql)
         transaction.rollback()
+
 
 class TransactionContextManagerTests(IgnoreDeprecationWarningsMixin, TransactionTestCase):
 
@@ -672,6 +679,6 @@ class TransactionContextManagerTests(IgnoreDeprecationWarningsMixin, Transaction
         """
         with self.assertRaises(IntegrityError):
             with transaction.commit_on_success():
-                cursor = connection.cursor()
-                cursor.execute("INSERT INTO transactions_reporter (first_name, last_name) VALUES ('Douglas', 'Adams');")
+                with connection.cursor() as cursor:
+                    cursor.execute("INSERT INTO transactions_reporter (first_name, last_name) VALUES ('Douglas', 'Adams');")
         transaction.rollback()

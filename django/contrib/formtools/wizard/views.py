@@ -28,6 +28,7 @@ def normalize_name(name):
     new = re.sub('(((?<=[a-z])[A-Z])|([A-Z](?![A-Z]|$)))', '_\\1', name)
     return new.lower().strip('_')
 
+
 class StepsHelper(object):
 
     def __init__(self, wizard):
@@ -122,7 +123,7 @@ class WizardView(TemplateView):
 
     @classmethod
     def get_initkwargs(cls, form_list=None, initial_dict=None,
-        instance_dict=None, condition_dict=None, *args, **kwargs):
+            instance_dict=None, condition_dict=None, *args, **kwargs):
         """
         Creates a dict with all needed parameters for the form wizard instances.
 

@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 import copy
 import datetime
+import warnings
 
 from django.contrib.admin.tests import AdminSeleniumWebDriverTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -18,8 +19,7 @@ from django.forms.widgets import RadioFieldRenderer
 from django.utils.safestring import mark_safe
 from django.utils import six
 from django.utils.translation import activate, deactivate, override
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings
 from django.utils.encoding import python_2_unicode_compatible, force_text
 
 from ..models import Article
@@ -286,7 +286,7 @@ class FormsWidgetTestCase(TestCase):
         things = ({'id': 1, 'name': 'And Boom'}, {'id': 2, 'name': 'One More Thing!'})
 
         class SomeForm(Form):
-            somechoice = ChoiceField(choices=chain((('', '-'*9),), [(thing['id'], thing['name']) for thing in things]))
+            somechoice = ChoiceField(choices=chain((('', '-' * 9),), [(thing['id'], thing['name']) for thing in things]))
         f = SomeForm()
         self.assertHTMLEqual(f.as_table(), '<tr><th><label for="id_somechoice">Somechoice:</label></th><td><select name="somechoice" id="id_somechoice">\n<option value="" selected="selected">---------</option>\n<option value="1">And Boom</option>\n<option value="2">One More Thing!</option>\n</select></td></tr>')
         self.assertHTMLEqual(f.as_table(), '<tr><th><label for="id_somechoice">Somechoice:</label></th><td><select name="somechoice" id="id_somechoice">\n<option value="" selected="selected">---------</option>\n<option value="1">And Boom</option>\n<option value="2">One More Thing!</option>\n</select></td></tr>')
@@ -1003,6 +1003,7 @@ class NullBooleanSelectLazyForm(Form):
     """Form to test for lazy evaluation. Refs #17190"""
     bool = BooleanField(widget=NullBooleanSelect())
 
+
 @override_settings(USE_L10N=True)
 class FormsI18NWidgetsTestCase(TestCase):
     def setUp(self):
@@ -1092,18 +1093,22 @@ class WidgetTests(TestCase):
         class SplitDateForm(Form):
             field = DateTimeField(widget=SplitDateTimeWidget, required=False)
 
-        form = SplitDateForm({'field': ''})
-        self.assertTrue(form.is_valid())
-        form = SplitDateForm({'field': ['', '']})
-        self.assertTrue(form.is_valid())
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
+            form = SplitDateForm({'field': ''})
+            self.assertTrue(form.is_valid())
+            form = SplitDateForm({'field': ['', '']})
+            self.assertTrue(form.is_valid())
 
         class SplitDateRequiredForm(Form):
             field = DateTimeField(widget=SplitDateTimeWidget, required=True)
 
-        form = SplitDateRequiredForm({'field': ''})
-        self.assertFalse(form.is_valid())
-        form = SplitDateRequiredForm({'field': ['', '']})
-        self.assertFalse(form.is_valid())
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
+            form = SplitDateRequiredForm({'field': ''})
+            self.assertFalse(form.is_valid())
+            form = SplitDateRequiredForm({'field': ['', '']})
+            self.assertFalse(form.is_valid())
 
 
 class LiveWidgetTests(AdminSeleniumWebDriverTestCase):
@@ -1135,6 +1140,7 @@ class FakeFieldFile(object):
 
     def __str__(self):
         return self.url
+
 
 class ClearableFileInputTests(TestCase):
     def test_clear_input_renders(self):

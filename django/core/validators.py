@@ -40,11 +40,14 @@ class RegexValidator(object):
         if not self.regex.search(force_text(value)):
             raise ValidationError(self.message, code=self.code)
 
+    def __eq__(self, other):
+        return isinstance(other, RegexValidator) and (self.regex == other.regex) and (self.message == other.message) and (self.code == other.code)
+
 
 @deconstructible
 class URLValidator(RegexValidator):
     regex = re.compile(
-        r'^(?:http|ftp)s?://'  # http:// or https://
+        r'^(?:[a-z0-9\.\-]*)://'  # scheme is validated separately
         r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
         r'localhost|'  # localhost...
         r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|'  # ...or ipv4
@@ -52,14 +55,26 @@ class URLValidator(RegexValidator):
         r'(?::\d+)?'  # optional port
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
     message = _('Enter a valid URL.')
+    schemes = ['http', 'https', 'ftp', 'ftps']
+
+    def __init__(self, schemes=None, **kwargs):
+        super(URLValidator, self).__init__(**kwargs)
+        if schemes is not None:
+            self.schemes = schemes
 
     def __call__(self, value):
+        value = force_text(value)
+        # Check first if the scheme is valid
+        scheme = value.split('://')[0].lower()
+        if scheme not in self.schemes:
+            raise ValidationError(self.message, code=self.code)
+
+        # Then check full URL
         try:
             super(URLValidator, self).__call__(value)
         except ValidationError as e:
             # Trivial case failed. Try for possible IDN domain
             if value:
-                value = force_text(value)
                 scheme, netloc, path, query, fragment = urlsplit(value)
                 try:
                     netloc = netloc.encode('idna').decode('ascii')  # IDN -> ACE
@@ -86,7 +101,7 @@ class EmailValidator(object):
     code = 'invalid'
     user_regex = re.compile(
         r"(^[-!#$%&'*+/=?^_`{}|~0-9A-Z]+(\.[-!#$%&'*+/=?^_`{}|~0-9A-Z]+)*$"  # dot-atom
-        r'|^"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"$)', # quoted-string
+        r'|^"([\001-\010\013\014\016-\037!#-\[\]-\177]|\\[\001-\011\013\014\016-\177])*"$)',  # quoted-string
         re.IGNORECASE)
     domain_regex = re.compile(
         r'(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}|[A-Z0-9-]{2,})$'  # domain
@@ -126,6 +141,9 @@ class EmailValidator(object):
             except UnicodeError:
                 pass
             raise ValidationError(self.message, code=self.code)
+
+    def __eq__(self, other):
+        return isinstance(other, EmailValidator) and (self.domain_whitelist == other.domain_whitelist) and (self.message == other.message) and (self.code == other.code)
 
 validate_email = EmailValidator()
 
@@ -192,6 +210,9 @@ class BaseValidator(object):
         params = {'limit_value': self.limit_value, 'show_value': cleaned}
         if self.compare(cleaned, self.limit_value):
             raise ValidationError(self.message, code=self.code, params=params)
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and (self.limit_value == other.limit_value) and (self.message == other.message) and (self.code == other.code)
 
 
 @deconstructible

@@ -25,15 +25,15 @@ if HAS_GEOS:
 
 
 @skipUnless(HAS_GEOIP and getattr(settings, "GEOIP_PATH", None),
-    "GeoIP is required along with the GEOIP_DATA setting.")
+    "GeoIP is required along with the GEOIP_PATH setting.")
 class GeoIPTest(unittest.TestCase):
 
     def test01_init(self):
         "Testing GeoIP initialization."
-        g1 = GeoIP() # Everything inferred from GeoIP path
+        g1 = GeoIP()  # Everything inferred from GeoIP path
         path = settings.GEOIP_PATH
-        g2 = GeoIP(path, 0) # Passing in data path explicitly.
-        g3 = GeoIP.open(path, 0) # MaxMind Python API syntax.
+        g2 = GeoIP(path, 0)  # Passing in data path explicitly.
+        g3 = GeoIP.open(path, 0)  # MaxMind Python API syntax.
 
         for g in (g1, g2, g3):
             self.assertEqual(True, bool(g._country))

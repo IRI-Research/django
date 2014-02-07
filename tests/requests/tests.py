@@ -6,17 +6,16 @@ from io import BytesIO
 from itertools import chain
 import time
 from unittest import skipIf
-import warnings
 
-from django.db import connection, connections, DEFAULT_DB_ALIAS
+from django.db import connection, connections
 from django.core import signals
 from django.core.exceptions import SuspiciousOperation
 from django.core.handlers.wsgi import WSGIRequest, LimitedStream
 from django.http import (HttpRequest, HttpResponse, parse_cookie,
     build_request_repr, UnreadablePostError, RawPostDataException)
-from django.test import SimpleTestCase, TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from django.test.client import FakePayload
-from django.test.utils import override_settings, str_prefix
+from django.test.utils import str_prefix
 from django.utils import six
 from django.utils.http import cookie_date, urlencode
 from django.utils.six.moves.urllib.parse import urlencode as original_urlencode
@@ -42,6 +41,22 @@ class RequestsTests(SimpleTestCase):
         self.assertEqual(build_request_repr(request), repr(request))
         self.assertEqual(build_request_repr(request, path_override='/otherpath/', GET_override={'a': 'b'}, POST_override={'c': 'd'}, COOKIES_override={'e': 'f'}, META_override={'g': 'h'}),
                          str_prefix("<HttpRequest\npath:/otherpath/,\nGET:{%(_)s'a': %(_)s'b'},\nPOST:{%(_)s'c': %(_)s'd'},\nCOOKIES:{%(_)s'e': %(_)s'f'},\nMETA:{%(_)s'g': %(_)s'h'}>"))
+
+    def test_bad_httprequest_repr(self):
+        """
+        If an exception occurs when parsing GET, POST, COOKIES, or META, the
+        repr of the request should show it.
+        """
+        class Bomb(object):
+            """An object that raises an exception when printed out."""
+            def __repr__(self):
+                raise Exception('boom!')
+
+        bomb = Bomb()
+        for attr in ['GET', 'POST', 'COOKIES', 'META']:
+            request = HttpRequest()
+            setattr(request, attr, {'bomb': bomb})
+            self.assertIn('%s:<could not parse>' % attr, repr(request))
 
     def test_wsgirequest(self):
         request = WSGIRequest({'PATH_INFO': 'bogus', 'REQUEST_METHOD': 'bogus', 'wsgi.input': BytesIO(b'')})
@@ -163,7 +178,7 @@ class RequestsTests(SimpleTestCase):
         response.set_cookie('max_age', max_age=10)
         max_age_cookie = response.cookies['max_age']
         self.assertEqual(max_age_cookie['max-age'], 10)
-        self.assertEqual(max_age_cookie['expires'], cookie_date(time.time()+10))
+        self.assertEqual(max_age_cookie['expires'], cookie_date(time.time() + 10))
 
     def test_httponly_cookie(self):
         response = HttpResponse()
@@ -525,7 +540,7 @@ class HostValidationTests(SimpleTestCase):
             '12.34.56.78:443',
             '[2001:19f0:feee::dead:beef:cafe]',
             '[2001:19f0:feee::dead:beef:cafe]:8080',
-            'xn--4ca9at.com', # Punnycode for öäü.com
+            'xn--4ca9at.com',  # Punnycode for öäü.com
             'anything.multitenant.com',
             'multitenant.com',
             'insensitive.com',
@@ -595,7 +610,7 @@ class HostValidationTests(SimpleTestCase):
             '12.34.56.78:443',
             '[2001:19f0:feee::dead:beef:cafe]',
             '[2001:19f0:feee::dead:beef:cafe]:8080',
-            'xn--4ca9at.com', # Punnycode for öäü.com
+            'xn--4ca9at.com',  # Punnycode for öäü.com
         ]
 
         for host in legit_hosts:
@@ -637,11 +652,11 @@ class HostValidationTests(SimpleTestCase):
         msg_suggestion = msg_invalid_host + "You may need to add %r to ALLOWED_HOSTS."
         msg_suggestion2 = msg_invalid_host + "The domain name provided is not valid according to RFC 1034/1035"
 
-        for host in [ # Valid-looking hosts
+        for host in [  # Valid-looking hosts
             'example.com',
             '12.34.56.78',
             '[2001:19f0:feee::dead:beef:cafe]',
-            'xn--4ca9at.com', # Punnycode for öäü.com
+            'xn--4ca9at.com',  # Punnycode for öäü.com
         ]:
             request = HttpRequest()
             request.META = {'HTTP_HOST': host}
@@ -651,7 +666,7 @@ class HostValidationTests(SimpleTestCase):
                 request.get_host
             )
 
-        for domain, port in [ # Valid-looking hosts with a port number
+        for domain, port in [  # Valid-looking hosts with a port number
             ('example.com', 80),
             ('12.34.56.78', 443),
             ('[2001:19f0:feee::dead:beef:cafe]', 8080),
@@ -710,7 +725,7 @@ class DatabaseConnectionHandlingTests(TransactionTestCase):
         # request_finished signal.
         response = self.client.get('/')
         # Make sure there is an open connection
-        connection.cursor()
+        connection.ensure_connection()
         connection.enter_transaction_management()
         signals.request_finished.send(sender=response._handler_class)
         self.assertEqual(len(connection.transaction_state), 0)

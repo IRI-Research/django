@@ -1,15 +1,10 @@
 from __future__ import unicode_literals
 
-from django.core.cache import get_cache, InvalidCacheBackendError
+from django.core.cache import caches, InvalidCacheBackendError
 from django.core.cache.utils import make_template_fragment_key
 from django.template import Library, Node, TemplateSyntaxError, VariableDoesNotExist
 
 register = Library()
-
-try:
-    default_cache = get_cache('template_fragments')
-except InvalidCacheBackendError:
-    from django.core.cache import cache as default_cache
 
 
 class CacheNode(Node):
@@ -35,18 +30,23 @@ class CacheNode(Node):
             except VariableDoesNotExist:
                 raise TemplateSyntaxError('"cache" tag got an unknown variable: %r' % self.cache_name.var)
             try:
-                cache = get_cache(cache_name)
+                fragment_cache = caches[cache_name]
             except InvalidCacheBackendError:
                 raise TemplateSyntaxError('Invalid cache name specified for cache tag: %r' % cache_name)
         else:
-            cache = default_cache
+            try:
+                fragment_cache = caches['template_fragments']
+            except InvalidCacheBackendError:
+                fragment_cache = caches['default']
+
         vary_on = [var.resolve(context) for var in self.vary_on]
         cache_key = make_template_fragment_key(self.fragment_name, vary_on)
-        value = cache.get(cache_key)
+        value = fragment_cache.get(cache_key)
         if value is None:
             value = self.nodelist.render(context)
-            cache.set(cache_key, value, expire_time)
+            fragment_cache.set(cache_key, value, expire_time)
         return value
+
 
 @register.tag('cache')
 def do_cache(parser, token):
@@ -86,7 +86,7 @@ def do_cache(parser, token):
         cache_name = None
     return CacheNode(nodelist,
         parser.compile_filter(tokens[1]),
-        tokens[2], # fragment_name can't be a variable.
+        tokens[2],  # fragment_name can't be a variable.
         [parser.compile_filter(t) for t in tokens[3:]],
         cache_name,
     )

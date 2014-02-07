@@ -8,8 +8,7 @@ import warnings
 
 from django import http
 from django.contrib.formtools import preview, utils
-from django.test import TestCase
-from django.test.utils import override_settings
+from django.test import TestCase, override_settings
 from django.utils._os import upath
 
 from django.contrib.formtools.tests.forms import (
@@ -18,6 +17,7 @@ from django.contrib.formtools.tests.forms import (
 
 success_string = "Done was called!"
 success_string_encoded = success_string.encode()
+
 
 class TestFormPreview(preview.FormPreview):
     def get_context(self, request, form):
@@ -30,6 +30,7 @@ class TestFormPreview(preview.FormPreview):
 
     def done(self, request, cleaned_data):
         return http.HttpResponse(success_string)
+
 
 @override_settings(
     TEMPLATE_DIRS=(

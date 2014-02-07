@@ -1,15 +1,11 @@
 from __future__ import unicode_literals
 
-import copy
 import logging
-import sys
-from unittest import skipUnless
 import warnings
 
-from django.conf import LazySettings
 from django.core import mail
-from django.test import TestCase, RequestFactory
-from django.test.utils import override_settings, patch_logger
+from django.test import TestCase, RequestFactory, override_settings
+from django.test.utils import patch_logger
 from django.utils.encoding import force_text
 from django.utils.log import (CallbackFilter, RequireDebugFalse,
     RequireDebugTrue)
@@ -65,6 +61,7 @@ class LoggingFiltersTest(TestCase):
         with self.settings(DEBUG=False):
             self.assertEqual(filter_.filter("record is not used"), False)
 
+
 class DefaultLoggingTest(TestCase):
     def setUp(self):
         self.logger = logging.getLogger('django')
@@ -86,6 +83,7 @@ class DefaultLoggingTest(TestCase):
             self.logger.error("Hey, this is an error.")
             self.assertEqual(output.getvalue(), 'Hey, this is an error.\n')
 
+
 class WarningLoggerTests(TestCase):
     """
     Tests that warnings output for DeprecationWarnings is enabled
@@ -93,8 +91,8 @@ class WarningLoggerTests(TestCase):
     """
     def setUp(self):
         # If tests are invoke with "-Wall" (or any -W flag actually) then
-        # warning logging gets disabled (see django/conf/__init__.py). However,
-        # these tests expect warnings to be logged, so manually force warnings
+        # warning logging gets disabled (see configure_logging in django/utils/log.py).
+        # However, these tests expect warnings to be logged, so manually force warnings
         # to the logs. Use getattr() here because the logging capture state is
         # undocumented and (I assume) brittle.
         self._old_capture_state = bool(getattr(logging, '_warnings_showwarning', False))
@@ -335,7 +333,7 @@ class SettingsConfigTest(AdminScriptTestCase):
         # validate is just an example command to trigger settings configuration
         out, err = self.run_manage(['validate'])
         self.assertNoOutput(err)
-        self.assertOutput(out, "0 errors found")
+        self.assertOutput(out, "System check identified no issues (0 silenced).")
 
 
 def dictConfig(config):
@@ -343,15 +341,14 @@ def dictConfig(config):
 dictConfig.called = False
 
 
-class SettingsConfigureLogging(TestCase):
+class SetupConfigureLogging(TestCase):
     """
-    Test that calling settings.configure() initializes the logging
-    configuration.
+    Test that calling django.setup() initializes the logging configuration.
     """
+    @override_settings(LOGGING_CONFIG='logging_tests.tests.dictConfig')
     def test_configure_initializes_logging(self):
-        settings = LazySettings()
-        settings.configure(
-            LOGGING_CONFIG='logging_tests.tests.dictConfig')
+        from django import setup
+        setup()
         self.assertTrue(dictConfig.called)
 
 
@@ -371,3 +368,12 @@ class SecurityLoggerTest(TestCase):
             self.client.get('/suspicious_spec/')
             self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0], 'dubious')
+
+    @override_settings(
+        ADMINS=(('admin', 'admin@example.com'),),
+        DEBUG=False,
+    )
+    def test_suspicious_email_admins(self):
+        self.client.get('/suspicious/')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('path:/suspicious/,', mail.outbox[0].body)
