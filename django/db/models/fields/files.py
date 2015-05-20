@@ -191,6 +191,14 @@ class FileDescriptor(object):
         # in __set__.
         file = instance.__dict__[self.field.name]
 
+        # If this value is callable (certainly because the field was defined
+        # with a callable default), we execute the function and assign the
+        # result to the value
+        if six.callable(file):
+            file = file()
+            if isinstance(file, FieldFile) and not hasattr(file, 'field'):
+                instance.__dict__[self.field.name] = file
+
         # If this value is a string (instance.file = "path/to/file") or None
         # then we simply wrap it with the appropriate attribute class according
         # to the file field. [This is FieldFile for FileFields and
